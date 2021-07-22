@@ -1,0 +1,7 @@
+Installer x64 version 2.0.0.0 :
+ - Components installed :
+    - EULA English version rev1
+    - TMSiSagaDeviceLib.dll v2.0.0.0
+    - libusbk 3.0.7.0
+    - vcredist x64 2015 v14.0.23026.0
+    - license-text-files for libusbk
