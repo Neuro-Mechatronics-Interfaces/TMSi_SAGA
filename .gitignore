@@ -2,3 +2,8 @@
 *.Poly5
 *.idea
 *.pyc
+Drivers/
+
+Python/file_formats/__init__.py
+
+Python/filters/__init__.py
