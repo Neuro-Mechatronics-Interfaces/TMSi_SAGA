@@ -9,3 +9,5 @@ Python/file_formats/__init__.py
 Python/filters/__init__.py
 
 Python/devices/__init__.py
+
+*.asv

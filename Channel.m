@@ -381,7 +381,7 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %   obj [in] - Channel object.
             %      
             
-            is_true = strcmp(obj.name, 'COUNTER');
+            is_true = strcmp({obj.name}, 'COUNTER');
         end
 
         function is_true = isStatus(obj)
@@ -396,7 +396,22 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %   obj [in] - Channel object.
             %      
             
-            is_true = strcmp(obj.name, 'STATUS');
+            is_true = strcmp({obj.name}, 'STATUS');
+        end
+        
+        function is_true = isTrigger(obj)
+            %ISTRIGGER - A function to check if this channel is the TRIGGER channel.
+            %
+            %   is_true = isTrigger(obj)
+            %
+            %   This function checks if the name of the channel is TRIGGER.
+            %
+            %   is_true [out] - Boolean that states whether channel type is
+            %   	TRIGGER.
+            %   obj [in] - Channel object.
+            %      
+            
+            is_true = contains({obj.name}, 'TRIGGER');
         end
 
         function result = transform(obj, samples)
