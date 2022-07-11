@@ -147,7 +147,14 @@ classdef Library < TMSiSAGA.HiddenHandle
             %   device_id [in] - Unique device id for this device.
             %   dr_interface [in] - Interface type that is used by the data recorder.
             %
-            
+            if numel(device_id) > 1
+                device = cell(size(device_id));
+                for ii = 1:numel(device_id)
+                    device{ii} = obj.getDevice(device_id(ii), dr_interface);
+                end
+                device = vertcat(device{:});
+                return;
+            end
             device = TMSiSAGA.Device(obj, int64(device_id), dr_interface);
         end
 

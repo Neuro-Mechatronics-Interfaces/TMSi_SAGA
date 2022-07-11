@@ -10,21 +10,21 @@ classdef DeviceLib < TMSiSAGA.HiddenHandle
         end
         
         function result = trace()
-            result = false;
+            result = true;
         end
 
         function device_list = getDeviceList(ds_interface_type, dr_interface_type, maxNumOfRetries, max_num_devices)
             %GETDEVICELIST -  Call the dll TMSiGetDeviceList function (max 2 devices)
             
-            if TMSiSAGA.DeviceLib.trace()
-                fprintf(1, 'getDeviceList:\n\t ds_interface_type %d\n\t dr_interface_type %d\n\t max_num_devices %d\n', ds_interface_type, dr_interface_type, max_num_devices);
-            end
-            
             % Default for max_num_devices
             if ~exist('max_num_devices', 'var')
                 max_num_devices = 2; 
             end
-
+            
+            if TMSiSAGA.DeviceLib.trace()
+                fprintf(1, 'getDeviceList:\n\t ds_interface_type %d\n\t dr_interface_type %d\n\t max_num_devices %d\n', ds_interface_type, dr_interface_type, max_num_devices);
+            end
+            
             % Initialise the number of retries that are executed to find
             % the device.
             nrOfRetries = 1;

@@ -990,6 +990,56 @@ classdef Device < TMSiSAGA.HiddenHandle
             channels = obj.channels(isActive(obj.channels, obj.impedance_mode));
         end
         
+        function saveDeviceConfig(obj, fname_config)
+            %SAVEDEVICECONFIG - Save device configuration
+            %
+            % Syntax:
+            %   saveDeviceConfig(device, fname_config);
+            %
+            % Inputs:
+            %   fname_config (Optional) - String or char array that is the
+            %    name of the file to save the configuration(s) in. If not
+            %    given, then saves to "defaults_<SN>.mat" in the current
+            %    workspace path.
+            %
+            %    If `device` is an array, then fname_config should be a
+            %    string array or cell array of char arrays with filename
+            %    elements corresponding to each device element.
+            % 
+            % See also: Contents
+            if numel(obj) > 1
+                for ii = 1:numel(obj)
+                    if nargin < 2
+                        saveDeviceConfig(obj(ii));
+                    else
+                        saveDeviceConfig(obj(ii), fname_config{ii});
+                    end
+                end
+                return;
+            end
+            if nargin < 2
+                fname_config = fullfile(pwd, sprintf("defaults_%d.mat", obj.data_recorder.serial_number));
+            end
+            
+            config = struct( ...
+                'DRSerialNumber', obj.data_recorder.serial_number, ...
+                'NrOfChannels', obj.num_channels, ...
+                'SetBaseSampleRateHz', uint16(obj.configuration.base_sample_rate), ...
+                'SetConfiguredInterface', uint16(TMSiSAGA.TMSiUtils.toInterfaceTypeNumber(obj.data_recorder.interface_type)), ...
+                'SetTriggers', int16(obj.configuration.triggers), ...
+                'SetRefMethod', int16(TMSiSAGA.TMSiUtils.toReferenceMethodNumber(obj.configuration.reference_method)), ...
+                'SetAutoRefMethod', int16(obj.configuration.auto_reference_method), ...
+                'SetDRSyncOutDiv', int16(obj.data_recorder.sync_out_divider), ...
+                'DRSyncOutDutyCycl', int16(obj.data_recorder.sync_out_duty_cycle), ...
+                'SetRepairLogging', int16(obj.configuration.repair_logging), ...
+                'PerformFactoryReset', 0, ...
+                'StoreAsDefault', 0, ...
+                'WebIfCtrl', 0, ...
+                'PinKey', uint8(obj.pinkey) ...
+            );
+            save(fname_config, 'config', '-v7.3');
+        end
+        
         function updateDeviceConfig(obj, perform_factory_reset, store_as_default, web_interface_control)
             %UPDATEDEVICECONFIG - Apply config changes to the device.
             %
