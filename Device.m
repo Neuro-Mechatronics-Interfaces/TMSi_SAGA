@@ -200,32 +200,45 @@ classdef Device < TMSiSAGA.HiddenHandle
         function updateDeviceConfig_(obj, perform_factory_reset, store_as_default, web_interface_control)
             if ~exist('perform_factory_reset', 'var')
                 perform_factory_reset = 0;
+                parse_config = true;
+            else
+                if isstruct(perform_factory_reset)
+                    parse_config = false;
+                    device_config = perform_factory_reset;
+                    perform_factory_reset = device_config.PerformFactoryReset;
+                    store_as_default = device_config.StoreAsDefault;
+                    web_interface_control = device_config.WebIfCtrl;
+                else
+                    parse_config = true;
+                end
             end
             
-            if ~exist('store_as_default', 'var')
-                store_as_default = 0;
+            if parse_config
+                if ~exist('store_as_default', 'var')
+                    store_as_default = 0;
+                end
+
+                if ~exist('web_interface_control', 'var')
+                    web_interface_control = 0;
+                end
+
+                device_config = struct( ...
+                    'DRSerialNumber', obj.data_recorder.serial_number, ...
+                    'NrOfChannels', obj.num_channels, ...
+                    'SetBaseSampleRateHz', uint16(obj.configuration.base_sample_rate), ...
+                    'SetConfiguredInterface', uint16(TMSiSAGA.TMSiUtils.toInterfaceTypeNumber(obj.data_recorder.interface_type)), ...
+                    'SetTriggers', int16(obj.configuration.triggers), ...
+                    'SetRefMethod', int16(TMSiSAGA.TMSiUtils.toReferenceMethodNumber(obj.configuration.reference_method)), ...
+                    'SetAutoRefMethod', int16(obj.configuration.auto_reference_method), ...
+                    'SetDRSyncOutDiv', int16(obj.data_recorder.sync_out_divider), ...
+                    'DRSyncOutDutyCycl', int16(obj.data_recorder.sync_out_duty_cycle), ...
+                    'SetRepairLogging', int16(obj.configuration.repair_logging), ...
+                    'PerformFactoryReset', perform_factory_reset, ...
+                    'StoreAsDefault', store_as_default, ...
+                    'WebIfCtrl', web_interface_control, ...
+                    'PinKey', uint8(obj.pinkey) ...
+                    );
             end
-            
-            if ~exist('web_interface_control', 'var')
-                web_interface_control = 0;
-            end
-            
-            device_config = struct( ...
-                'DRSerialNumber', obj.data_recorder.serial_number, ...
-                'NrOfChannels', obj.num_channels, ...
-                'SetBaseSampleRateHz', uint16(obj.configuration.base_sample_rate), ...
-                'SetConfiguredInterface', uint16(TMSiSAGA.TMSiUtils.toInterfaceTypeNumber(obj.data_recorder.interface_type)), ...
-                'SetTriggers', int16(obj.configuration.triggers), ...
-                'SetRefMethod', int16(TMSiSAGA.TMSiUtils.toReferenceMethodNumber(obj.configuration.reference_method)), ...
-                'SetAutoRefMethod', int16(obj.configuration.auto_reference_method), ...
-                'SetDRSyncOutDiv', int16(obj.data_recorder.sync_out_divider), ...
-                'DRSyncOutDutyCycl', int16(obj.data_recorder.sync_out_duty_cycle), ...
-                'SetRepairLogging', int16(obj.configuration.repair_logging), ...
-                'PerformFactoryReset', perform_factory_reset, ...
-                'StoreAsDefault', store_as_default, ...
-                'WebIfCtrl', web_interface_control, ...
-                'PinKey', uint8(obj.pinkey) ...
-                );
             
             channels = struct();
             for i=1:numel(obj.channels)
@@ -961,7 +974,7 @@ classdef Device < TMSiSAGA.HiddenHandle
             
             for i=1:numel(obj.sensors)
                 for j=1:obj.sensors(i).num_channels
-                    channels{numel(channels) + 1} = obj.channels(obj.sensors(i).channel_number + j);
+                    channels{numel(channels) + 1} = obj.channels(obj.sensors(i).channel_number + j); %#ok<AGROW>
                 end
             end
             channels = vertcat(channels{:});
@@ -1005,6 +1018,10 @@ classdef Device < TMSiSAGA.HiddenHandle
             %    If `device` is an array, then fname_config should be a
             %    string array or cell array of char arrays with filename
             %    elements corresponding to each device element.
+            %
+            %    If no `fname_config` is specified, AND a
+            %    default_<serial>.mat file already exists in the workspace
+            %    folder, AND the 
             % 
             % See also: Contents
             if numel(obj) > 1
@@ -1018,9 +1035,17 @@ classdef Device < TMSiSAGA.HiddenHandle
                 return;
             end
             if nargin < 2
-                fname_config = fullfile(pwd, sprintf("defaults_%d.mat", obj.data_recorder.serial_number));
+                fname_config = fullfile(pwd, sprintf("defaults_%d.mat", obj.getSerialNumber()));
+                do_overwrite = false;
+            else
+                do_overwrite = true;
             end
-            
+            if obj.is_connected
+                obj.getDeviceInfo(); % Make sure device info is current.
+            elseif ~do_overwrite
+                warning("Config not saved: devices not connected and no filename specified. Are you sure the device configuration is correct?");
+                return;
+            end
             config = struct( ...
                 'DRSerialNumber', obj.data_recorder.serial_number, ...
                 'NrOfChannels', obj.num_channels, ...
@@ -1035,9 +1060,51 @@ classdef Device < TMSiSAGA.HiddenHandle
                 'PerformFactoryReset', 0, ...
                 'StoreAsDefault', 0, ...
                 'WebIfCtrl', 0, ...
-                'PinKey', uint8(obj.pinkey) ...
+                'PinKey', uint8(obj.pinkey), ...
+                'Tag', obj.tag ...
             );
             save(fname_config, 'config', '-v7.3');
+        end
+        
+        function loadDeviceConfig(obj, fname_config)
+            %SAVEDEVICECONFIG - Load device configuration
+            %
+            % Syntax:
+            %   loadDeviceConfig(device, fname_config);
+            %
+            % Inputs:
+            %   fname_config (Optional) - String or char array that is the
+            %    name of the file to save the configuration(s) in. If not
+            %    given, then looks for "defaults_<SN>.mat" in the current
+            %    workspace path.
+            %   -- If device is an array then fname_config should be a cell
+            %       array with elements matched to each element of device.
+            % 
+            % See also: Contents
+            if numel(obj) > 1
+                for ii = 1:numel(obj)
+                    if nargin < 2
+                        loadDeviceConfig(obj(ii));
+                    else
+                        loadDeviceConfig(obj(ii), fname_config{ii});
+                    end
+                end
+                return;
+            end
+            if ~obj.is_connected
+                error("Must connect device first.");
+            end
+            if nargin < 2
+                fname_config = fullfile(pwd, sprintf('defaults_%d.mat', obj.getSerialNumber()));
+            end
+            config = getfield(load(fname_config, 'config'), 'config');
+            if ~(obj.data_recorder.serial_number==config.DRSerialNumber)
+                error("Data recorder serial number configuration mismatch--check config filename (using <strong>%s</strong>).", fname_config);
+            end
+            obj.setDeviceTag(obj.getSerialNumber(), config.Tag);
+            cfg = rmfield(config, 'Tag');
+            obj.updateDeviceConfig_(cfg);
+            fprintf(1,'<strong>Config loaded for SAGA-%s</strong>\n', config.Tag);
         end
         
         function updateDeviceConfig(obj, perform_factory_reset, store_as_default, web_interface_control)
