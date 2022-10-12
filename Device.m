@@ -1217,7 +1217,7 @@ classdef Device < TMSiSAGA.HiddenHandle
                 end
                 return;
             end
-            idx = SN == obj.docking_station.serial_number;
+            idx = SN == obj.data_recorder.serial_number;
             if sum(idx) == 0
                 error('No possible matching serial number in SN array!');
             end

@@ -80,7 +80,7 @@ classdef Library < TMSiSAGA.HiddenHandle
             obj.cleanUp(); 
         end
 
-        function devices = getDevices(obj, ds_interface, dr_interface, numOfRetries)
+        function devices = getDevices(obj, ds_interface, dr_interface, numOfRetries, max_devices)
             %GETDEVICES - Get a list of devices that are connected to the
             %PC with the specified interfaces. By default it searches on
             %ds_interface = network and dr_interface = electrical.
@@ -120,7 +120,7 @@ classdef Library < TMSiSAGA.HiddenHandle
                     try
                         device_list = TMSiSAGA.DeviceLib.getDeviceList(...
                             TMSiSAGA.TMSiUtils.toInterfaceTypeNumber(ds_interface{k}), ...
-                            TMSiSAGA.TMSiUtils.toInterfaceTypeNumber(dr_interface{j}), numOfRetries);
+                            TMSiSAGA.TMSiUtils.toInterfaceTypeNumber(dr_interface{j}), numOfRetries, max_devices);
                     catch
                         fprintf(1, 'No devices on interface (<strong>%s::%s</strong>)\n', ds_interface{k}, dr_interface{j});
                         continue;
