@@ -238,7 +238,7 @@ classdef DeviceLib < TMSiSAGA.HiddenHandle
             
             if TMSiSAGA.DeviceLib.trace()
                 fprintf(1, 'setDeviceImpedance\n');
-                fprintf(1, '\tdeviceImpedanceMode %d\n', deviceImpedanceMode);
+                fprintf(1, '\tdeviceImpedanceMode %d\n', deviceImpedanceMode.SetImpedanceMode);
             end
             
             deviceImpedanceMode = TMSiSAGA.TMSiUtils.toLibraryStructure('TMSiDevImpReq', deviceImpedanceMode);

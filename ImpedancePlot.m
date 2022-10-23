@@ -115,7 +115,7 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
     end
     
     methods
-        function obj = ImpedancePlot(fig, enabled_channels, channel_names, SAGA_type)
+        function obj = ImpedancePlot(fig, enabled_channels, channel_names)
             %IMPEDANCEPLOT - Constructor function for the ImpedancePlot Class
             %
             %   obj = ImpedancePlot(fig, name, enabled_channels, channel_names, SAGA_type)
@@ -130,17 +130,17 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
             
             obj.channels = enabled_channels + 1; % skip the CREF channel
             obj.channel_names = channel_names;        
-            obj.num_channels = SAGA_type;
+            obj.num_channels = 64;
             
             obj.figure_handle = fig;
-            set(obj.figure_handle, 'CloseRequestFcn', @obj.figure_closed_cb);
+            % set(obj.figure_handle, 'CloseRequestFcn', @obj.figure_closed_cb);
             
             % Ensure that y-axis is reversed (lowest value in the top of
             % the figure
             obj.axes_handle = axes(obj.figure_handle, ...
                 'NextPlot', 'add', 'YDir', 'reverse', ...
                 'FontSize', 12, 'FontName', 'Tahoma', ...
-                'XLim', [1 8], 'YLim', [1 SAGA_type/8]);
+                'XLim', [1 8], 'YLim', [1 8]);
             axis equal
             axis off   
             
