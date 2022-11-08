@@ -497,20 +497,21 @@ classdef Device < TMSiSAGA.HiddenHandle
             
             % Get channel info values
             %   1. Look up STATUS and COUNTER index
-            obj.active_channel_indices = [];
+            aci = [];
             for channel_index=1:numel(obj.channels)
                 if obj.channels(channel_index).isActive(obj.impedance_mode)
-                    obj.active_channel_indices(numel(obj.active_channel_indices) + 1) = channel_index;
+                    aci(numel(aci) + 1) = channel_index; %#ok<AGROW>
                     
                     if obj.channels(channel_index).isCounter()
-                        obj.current_counter_channel_index = numel(obj.active_channel_indices);
+                        obj.current_counter_channel_index = numel(aci);
                     end
                     
                     if obj.channels(channel_index).isStatus()
-                        obj.current_status_channel_index = numel(obj.active_channel_indices);
+                        obj.current_status_channel_index = numel(aci);
                     end
                 end
             end
+            obj.active_channel_indices = aci;
             
             obj.missing_samples = [];
             TMSiSAGA.DeviceLib.resetDeviceDataBuffer(obj.handle);
@@ -657,9 +658,10 @@ classdef Device < TMSiSAGA.HiddenHandle
             end
             
             % If repair logging is on, check for missing samples
-            missing_samples_mask = bitand(uint32(data(obj.current_status_channel_index, :)), uint32(hex2dec('100')));
-            missing_samples_mask(missing_samples_mask > 0) = 1;
-            
+            if obj.configuration.repair_logging
+                missing_samples_mask = bitand(uint32(data(obj.current_status_channel_index, :)), uint32(hex2dec('100')));
+                missing_samples_mask(missing_samples_mask > 0) = 1;
+            end
             if obj.configuration.repair_logging && numel(missing_samples_mask) > 0 && any(missing_samples_mask)
                 index = data(obj.current_counter_channel_index, 1);
                 count = 0;
