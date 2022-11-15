@@ -22,6 +22,7 @@ classdef Channel < TMSiSAGA.HiddenHandle
     %   setUnitname - Set the unit for this channel.
     %   setExponent - Set the exponent value for this channel.
     %   setAlternativeName - Set the alternative name for this channel.
+    %   isRef - (Added by MM): Check if this is a REF channel.
     %   isExG - Check if this an ExG channel.
     %   isBip - Check if this an Bip channel.
     %   isAux - Check if this an Aux channel.
@@ -30,6 +31,8 @@ classdef Channel < TMSiSAGA.HiddenHandle
     %   isSaw - Check if this a saw channel.
     %   isCounter - Check if this is the counter channel.
     %   isStatus - Check if this is the status channel.
+    %   setSAGA - (Added by MM): A function to set the `saga` property, which is the `tag` property of the Device this channel is associated with.
+    %   fromSAGA - (Added by MM): Checks if `saga` for this Channel matches the tag in the argument.
     %   transform - A function that transform the raw sample data.
     %
     %CHANNEL Example:
@@ -69,6 +72,12 @@ classdef Channel < TMSiSAGA.HiddenHandle
         
         % An optional sensor channel that is connected to this channel.
         sensor_channel
+    end
+
+    % Properties that must be set using class methods:
+    properties (GetAccess = public, SetAccess = protected)
+        % (Added MM) Which saga tag is this channel associated with?
+        saga (1,1) string = "X";
     end
 
     properties (Access = private)
@@ -279,6 +288,23 @@ classdef Channel < TMSiSAGA.HiddenHandle
             obj.device.out_of_sync = true;
         end
 
+        function is_true = isRef(obj)
+            %ISREF - A function to check if this channel is a REF channel.
+            %
+            %   is_true = isRef(obj);
+            %
+            %   is_true [out] - Boolean that states whether channel type is
+            %                   REF.
+            %   obj [in] - Channel object.
+            %
+            % (2022-11-15 - added by MM)
+            
+            is_true = false(size(obj));
+            for ii = 1:numel(obj)
+                is_true(ii) = contains(upper(obj(ii).name), 'REF');
+            end
+        end
+
         function is_true = isExG(obj)
             %ISEXG - A function to check if this channel is an ExG channel.
             %
@@ -412,6 +438,55 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %      
             
             is_true = contains({obj.name}, 'TRIGGER');
+        end
+
+        function setSAGA(obj, saga_tag)
+            %SETSAGA - A function to set the `saga` property, which is the `tag` property of the Device this channel is associated with.
+            %
+            %   setSAGA(obj, saga_tag);
+            %
+            % Should set saga_tag as "A" or "B". Can assign to array of
+            % Channel objects, and if saga_tag is a string array each
+            % element corresponds to matched element of `obj`.
+            if nargin < 1
+                me = MException('MATLAB:notEnoughInputs', 'Not enough input arguments.');
+                aac = matlab.lang.correction.AppendArgumentsCorrection('"A"');
+                me = me.addCorrection(aac);
+                throw(me);
+            end
+            saga_tag = string(saga_tag);
+            if isscalar(saga_tag)
+                saga_tag = repmat(saga_tag, size(obj));
+            end
+            for ii = 1:numel(obj)
+                obj(ii).saga = saga_tag(ii);
+            end
+        end
+
+        function is_true = fromSAGA(obj, saga_tag)
+            %FROMSAGA - A function to check the `saga` property against the provided tag.
+            %
+            %   fromSAGA(obj, saga_tag);
+            %
+            % Example:
+            %   idx = channels.fromSAGA("A"); % Get mask for channels from
+            %                                 % "A" SAGA (useful if running
+            %                                 % acquisition from two SAGA
+            %                                 % devices on same host PC).
+            if nargin < 1
+                me = MException('MATLAB:notEnoughInputs', 'Not enough input arguments.');
+                aac = matlab.lang.correction.AppendArgumentsCorrection('"A"');
+                me = me.addCorrection(aac);
+                throw(me);
+            end
+            saga_tag = string(saga_tag);
+            if isscalar(saga_tag)
+                saga_tag = repmat(saga_tag, size(obj));
+            end
+            is_true = false(size(obj));
+            for ii = 1:numel(obj)
+                is_true(ii) = strcmpi(obj(ii).saga, saga_tag(ii));
+            end
         end
 
         function result = transform(obj, samples)
