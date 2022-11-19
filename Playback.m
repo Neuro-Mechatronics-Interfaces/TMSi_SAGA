@@ -54,11 +54,14 @@ classdef Playback < TMSiSAGA.HiddenHandle
         sample_queue (1,:) double  % Queue of sample indices to return with next `sample` call
     end
 
+    properties (GetAccess = public, SetAccess = protected)
+        sample_rate (1,1) double = 4000.0;
+    end
+
     properties (Access = protected)
         impedance_mode (1,1) logical = false;
         type
         samples
-        sample_rate (1,1) double = 4000.0;
         serial_number (1,1) double = 42;
         timer
         max_buffer_samples (1,1) double = 16000
@@ -181,8 +184,9 @@ classdef Playback < TMSiSAGA.HiddenHandle
         function connect(self)
             %CONNECT  Emulates `Device` object `connect` -- sets TimerFcn
             for ii = 1:numel(self)
-                self(ii).timer.Period = 1/self.queue_update_rate;
-                self(ii).timer.TimerFcn = @(src,~)TMSiSAGA.Playback.increment_and_queue(src, self.index_step_size, self.max_buffer_samples, self.num_samples);
+                T = 1/self(ii).queue_update_rate;
+                self(ii).timer.Period = round(max(T-3, 0.25*T),3);
+                self(ii).timer.TimerFcn = @(src,~)TMSiSAGA.Playback.increment_and_queue(src, self(ii).index_step_size, self(ii).max_buffer_samples, self(ii).num_samples);
                 self(ii).is_connected = true;
                 if self(ii).verbose
                     fprintf(1,'Connected to TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
