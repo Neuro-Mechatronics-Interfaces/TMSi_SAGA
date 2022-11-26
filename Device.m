@@ -1663,7 +1663,7 @@ classdef Device < TMSiSAGA.HiddenHandle
             %   ChannelConfig.bip - BIP channels, 1-4
             %   ChannelConfig.aux - AUX channels, 1-9
             %   ChannelConfig.acc - internal accelerometer channels 0 or 1 
-            %       for disbale/enable
+            %       for disable/enable
             %   ChannelConfig.dig - DIGI configuration, 0 for DIGI Trigger 
             %       or 1 saturation sensor
             
