@@ -149,7 +149,7 @@ classdef Channel < TMSiSAGA.HiddenHandle
            %GET  Get 'name' value
            name = strings(size(obj));
            for ii = 1:numel(obj)
-               name(ii) = string(sprintf('%s: %s', obj(ii).device.tag, obj(ii).name));
+               name(ii) = string(sprintf('%s: %s', obj(ii).saga, obj(ii).name));
            end
         end
         
