@@ -139,10 +139,6 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 end
                 return;
             end
-            if contains(fname, '%s')
-                fname = strrep(fname, '\', '/');
-                fname = sprintf(fname, self.tag);
-            end
             [p,f,e] = fileparts(fname);
             if isempty(e)
                 expr = fullfile(p, strcat(f, '*'));
