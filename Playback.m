@@ -121,6 +121,28 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 self.(varargin{iV}) = varargin{iV+1};
             end
             
+            self.load_new(fname);
+            self.index_step_size = round(self.sample_rate/self.queue_update_rate);
+            self.timer = timer('ExecutionMode', 'fixedRate', ...
+                'BusyMode', 'queue', ...
+                'Period', 1, ...
+                'UserData', struct('sample_queue', [], 'cur_index', self.cur_index), ...
+                'TimerFcn', @(~,~)fprintf(1,"TMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag), ...
+                'Tag', sprintf('TMSiSAGA.Playback.%s.timer', self.tag));
+        end
+
+        function load_new(self, fname)
+            %LOAD_NEW  Load new file for the playback device.
+            if numel(self) > 1
+                for ii = 1:numel(self)
+                    self(ii).load_new(fname);
+                end
+                return;
+            end
+            if contains(fname, '%s')
+                fname = strrep(fname, '\', '/');
+                fname = sprintf(fname, self.tag);
+            end
             [p,f,e] = fileparts(fname);
             if isempty(e)
                 expr = fullfile(p, strcat(f, '*'));
@@ -164,13 +186,6 @@ classdef Playback < TMSiSAGA.HiddenHandle
             if numel(finfo) >= 6
                 self.tag = string(finfo{5});
             end
-            self.index_step_size = round(self.sample_rate/self.queue_update_rate);
-            self.timer = timer('ExecutionMode', 'fixedRate', ...
-                'BusyMode', 'queue', ...
-                'Period', 1, ...
-                'UserData', struct('sample_queue', [], 'cur_index', self.cur_index), ...
-                'TimerFcn', @(~,~)fprintf(1,"TMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag), ...
-                'Tag', sprintf('TMSiSAGA.Playback.%s.timer', self.tag));
         end
 
         function delete(self)
