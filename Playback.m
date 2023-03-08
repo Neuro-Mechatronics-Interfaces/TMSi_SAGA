@@ -40,6 +40,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
 
     properties
         name (1,1) string
+        fname (1,1) string
         channels
         tag (1,1) string = "X"
         is_connected (1,1) logical = false;
@@ -120,31 +121,13 @@ classdef Playback < TMSiSAGA.HiddenHandle
             for iV = 1:2:numel(varargin)
                 self.(varargin{iV}) = varargin{iV+1};
             end
-            
-            self.load_new(fname);
-            self.index_step_size = round(self.sample_rate/self.queue_update_rate);
-            self.timer = timer('ExecutionMode', 'fixedRate', ...
-                'BusyMode', 'queue', ...
-                'Period', 1, ...
-                'UserData', struct('sample_queue', [], 'cur_index', self.cur_index), ...
-                'TimerFcn', @(~,~)fprintf(1,"TMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag), ...
-                'Tag', sprintf('TMSiSAGA.Playback.%s.timer', self.tag));
-        end
-
-        function load_new(self, fname)
-            %LOAD_NEW  Load new file for the playback device.
-            if numel(self) > 1
-                for ii = 1:numel(self)
-                    self(ii).load_new(fname);
-                end
-                return;
-            end
+            self.fname = fname;
             [p,f,e] = fileparts(fname);
             if isempty(e)
                 expr = fullfile(p, strcat(f, '*'));
                 F = dir(expr);
                 if isempty(F)
-                    error("No files matched expression: %s", expr);
+                    error("[PLAYBACK]\tNo files matched expression: %s", expr);
                 end
                 if F(1).isdir
                     e = ".poly5";
@@ -175,9 +158,76 @@ classdef Playback < TMSiSAGA.HiddenHandle
                     end
                     self.channels = vertcat(x.channels{:});
                 otherwise
-                    error("Unsupported format: %s (should be '.mat' or '.poly5')", e);
+                    error("[PLAYBACK]\tUnsupported format: %s (should be '.mat' or '.poly5')", e);
             end
             clear x;
+            finfo = strsplit(f, '_');
+            if numel(finfo) >= 6
+                self.tag = string(finfo{5});
+            end
+
+            self.index_step_size = round(self.sample_rate/self.queue_update_rate);
+            self.timer = timer('ExecutionMode', 'fixedRate', ...
+                'BusyMode', 'queue', ...
+                'Period', 1, ...
+                'UserData', struct('sample_queue', [], 'cur_index', self.cur_index), ...
+                'TimerFcn', @(~,~)fprintf(1,"[PLAYBACK]\tTMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag), ...
+                'Tag', sprintf('TMSiSAGA.Playback.%s.timer', self.tag));
+        end
+
+        function load_new(self, fname)
+            %LOAD_NEW  Load new file for the playback device.
+            if numel(self) > 1
+                for ii = 1:numel(self)
+                    if nargin < 2
+                        self(ii).load_new();
+                    else
+                        self(ii).load_new(fname(ii));
+                    end
+                end
+                return;
+            end
+            if nargin < 2
+                fname = self.fname;
+            end
+            [p,f,e] = fileparts(fname);
+            if isempty(e)
+                expr = fullfile(p, strcat(f, '*'));
+                F = dir(expr);
+                if isempty(F)
+                    error("[PLAYBACK]\tNo files matched expression: %s", expr);
+                end
+                if F(1).isdir
+                    e = ".poly5";
+                    f = fullfile(f, F(1).name);
+                else
+                    e = ".mat";
+                end
+            end
+            self.type = e;
+            switch e
+                case ".poly5"
+                    self.name = fullfile(p, strcat(f, e));
+                    x = TMSiSAGA.Poly5.read(self.name);
+                    self.num_samples = x.num_samples;
+                    self.samples = x.samples;
+                    self.channels = vertcat(x.channels{:});
+                    self.sample_rate = x.sample_rate;
+                    self.num_samples = x.num_samples;
+                case ".mat"
+                    self.name = string(fullfile(p, strcat(f, e)));
+                    x = load(self.name);
+                    self.num_samples = size(x.samples, 2);
+                    self.samples = x.samples;
+                    if ~isfield(x, 'sample_rate')
+                        self.sample_rate = 4000;
+                    else
+                        self.sample_rate = x.sample_rate;
+                    end
+                    self.channels = vertcat(x.channels{:});
+                otherwise
+                    error("[PLAYBACK]\tUnsupported format: %s (should be '.mat' or '.poly5')", e);
+            end
             finfo = strsplit(f, '_');
             if numel(finfo) >= 6
                 self.tag = string(finfo{5});
@@ -194,27 +244,38 @@ classdef Playback < TMSiSAGA.HiddenHandle
 
         function connect(self)
             %CONNECT  Emulates `Device` object `connect` -- sets TimerFcn
-            for ii = 1:numel(self)
-                T = 1/self(ii).queue_update_rate;
-                self(ii).timer.Period = round(max(T-3, 0.25*T),3);
-                self(ii).timer.TimerFcn = @(src,~)TMSiSAGA.Playback.increment_and_queue(src, self(ii).index_step_size, self(ii).max_buffer_samples, self(ii).num_samples);
-                self(ii).is_connected = true;
-                if self(ii).verbose
-                    fprintf(1,'Connected to TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+            if numel(self) > 1
+                for ii = 1:numel(self)
+                    connect(self(ii));
                 end
+                return;
             end
+            self.load_new(self.fname);
+            T = 1/self.queue_update_rate;
+            self.timer.Period = round(max(T-3, 0.25*T),3);
+            self.timer.TimerFcn = @self.increment_and_queue;
+            self.is_connected = true;
+            if self.verbose
+                fprintf(1,'[PLAYBACK]\tConnected to TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
+            end
+
         end
 
         function disconnect(self)
             %DISCONNECT Does mostly nothing, just to emulate `Device` object
-            for ii = 1:numel(self)
-                self(ii).timer.Period = 1;
-                self(ii).timer.TimerFcn = @(~,~)fprintf(1,"TMSiSAGA.Playback.%s :: Sampling but not connected?", self(ii).tag);
-                self(ii).is_connected = false;
-                if self(ii).verbose
-                    fprintf(1,'Disconnected from TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+            if numel(self) > 1
+                for ii = 1:numel(self)
+                    disconnect(self(ii));
                 end
+                return;
             end
+            self.timer.Period = 1;
+            self.timer.TimerFcn = @(~,~)fprintf(1,"[PLAYBACK]\tTMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag);
+            self.is_connected = false;
+            if self.verbose
+                fprintf(1,'[PLAYBACK]\tDisconnected from TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
+            end
+
         end
 
         function [data, num_sets, data_type] = sample(self)
@@ -262,7 +323,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 start(self(ii).timer);
                 self(ii).is_sampling = true;
                 if self(ii).verbose
-                    fprintf(1,'Started TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[PLAYBACK]\tStarted TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -274,7 +335,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 self(ii).is_sampling = false;
                 self(ii).is_recording = false;
                 if self(ii).verbose
-                    fprintf(1,'Stopped TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[PLAYBACK]\tStopped TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -356,7 +417,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
             %UPDATEDEVICECONFIG  This literally does nothing
             for ii = 1:numel(self)
                 if self(ii).verbose
-                    fprintf(1,'Updated config for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[PLAYBACK]\tUpdated config for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -365,7 +426,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
             %SETCHANNELCONFIG  Does nothing, just for `Device` compatibility
             for ii = 1:numel(self)
                 if self(ii).verbose
-                    fprintf(1,'Set channel configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[PLAYBACK]\tSet channel configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -385,20 +446,21 @@ classdef Playback < TMSiSAGA.HiddenHandle
                     self(ii).impedance_mode = config(ii).ImpedanceMode;
                 end
                 if self(ii).verbose
-                    fprintf(1,'Set device configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[PLAYBACK]\tSet device configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
     end
 
-    methods (Hidden,Static)
-        function increment_and_queue(src,index_step_size,max_buffer_samples,num_samples)
-            next_samples = mod((src.UserData.cur_index:(src.UserData.cur_index+index_step_size-1))-1, num_samples)+1;
+    methods (Hidden,Access=public)
+        function increment_and_queue(self,src,~)
+            %INCREMENT_AND_QUEUE  This is the callback actually running the playback class.
+            next_samples = mod((src.UserData.cur_index:(src.UserData.cur_index+self.index_step_size-1))-1, self.num_samples)+1;
             src.UserData.sample_queue = horzcat(src.UserData.sample_queue, next_samples);
-            if numel(src.UserData.sample_queue) > max_buffer_samples
-                src.UserData.sample_queue = src.UserData.sample_queue((end-(max_buffer_samples+1)):end);
+            if numel(src.UserData.sample_queue) > self.max_buffer_samples
+                src.UserData.sample_queue = src.UserData.sample_queue((end-(self.max_buffer_samples+1)):end);
             end
-            src.UserData.cur_index = mod(src.UserData.cur_index+index_step_size-1, num_samples)+1;
+            src.UserData.cur_index = mod(src.UserData.cur_index+self.index_step_size-1, self.num_samples)+1;
         end
     end
 end

@@ -81,8 +81,8 @@ classdef Channel < TMSiSAGA.HiddenHandle
     end
 
     properties (Access = private)
-        % The source device of this channel.
-        device 
+%         % The source device of this channel.
+%         device 
 
         % The type to which the has to be transformed before using.
         to_type
@@ -113,7 +113,7 @@ classdef Channel < TMSiSAGA.HiddenHandle
                 end
                 return;
             end
-            obj.device = device;
+%             obj.device = device;
             obj.number = int64(number);
             obj.type = int64(channel_info.ChannelType);
             obj.format = int64(channel_info.ChannelFormat);
@@ -203,12 +203,12 @@ classdef Channel < TMSiSAGA.HiddenHandle
                 end
                 return;
             end
-            if obj.device.is_sampling
-                throw(MException('Channel:enable', 'Cannot enable/disable channel while device is sampling.'));
-            end
+%             if obj.device.is_sampling
+%                 throw(MException('Channel:enable', 'Cannot enable/disable channel while device is sampling.'));
+%             end
 
             obj.divider = obj.device.dividers(obj.type);
-            obj.device.out_of_sync = true;
+%             obj.device.out_of_sync = true;
         end
 
         function disable(obj)
@@ -221,12 +221,12 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %   obj [in] - Channel object.
             %
             
-            if obj.device.is_sampling
-                throw(MException('Channel:disable', 'Cannot enable/disable channel while device is sampling.'));
-            end
+%             if obj.device.is_sampling
+%                 throw(MException('Channel:disable', 'Cannot enable/disable channel while device is sampling.'));
+%             end
 
             obj.divider = -1;
-            obj.device.out_of_sync = true;
+%             obj.device.out_of_sync = true;
         end
 
         function setDeviceTag(obj, saga)
@@ -252,9 +252,9 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %   unit_name [in] - A string containing the unit name.
             %
 
-            if obj.device.is_sampling
-                throw(MException('Channel:setUnitName', 'Cannot change unit name while device is sampling.'));
-            end
+%             if obj.device.is_sampling
+%                 throw(MException('Channel:setUnitName', 'Cannot change unit name while device is sampling.'));
+%             end
 
             obj.unit_name = unit_name;
         end
@@ -271,9 +271,9 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %   exponent [in] - A value containing the exponent.
             %
             
-            if obj.device.is_sampling
-                throw(MException('Channel:setExponent', 'Cannot change exponent while device is sampling.'));
-            end
+%             if obj.device.is_sampling
+%                 throw(MException('Channel:setExponent', 'Cannot change exponent while device is sampling.'));
+%             end
 
             obj.exponent = exponent;
         end
@@ -290,13 +290,13 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %   alternative_name [in] - A string to be used as alternative name.
             %
         
-            if obj.device.is_sampling
-                throw(MException('Channel:setAlternativeName', 'Cannot change alternative name while device is sampling.'));
-            end
+%             if obj.device.is_sampling
+%                 throw(MException('Channel:setAlternativeName', 'Cannot change alternative name while device is sampling.'));
+%             end
 
             obj.alternative_name = alternative_name;
 
-            obj.device.out_of_sync = true;
+%             obj.device.out_of_sync = true;
         end
 
         function is_true = isRef(obj)
