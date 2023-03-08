@@ -1224,6 +1224,7 @@ classdef Device < TMSiSAGA.HiddenHandle
                 error('No possible matching serial number in SN array!');
             end
             obj.tag = TAG(idx);
+            setDeviceTag(obj.channels);
 
         end
         
@@ -1425,6 +1426,56 @@ classdef Device < TMSiSAGA.HiddenHandle
            for ii = 1:numel(obj)
                sn(ii) = obj(ii).docking_station.serial_number;
            end
+        end
+
+        function configStandardMode(obj, config_channels, config_device)
+            %CONFIGSTANDARDMODE - Helper to configure default HD-EMG acquisition settings.
+            if nargin < 2
+                config_channels = struct('uni', 1:64, ...
+                         'bip', 1:4, ...
+                         'dig', 0, ...
+                         'acc', 0, ...
+                         'aux', 1:2);
+            end
+            if nargin < 3
+                config_device = struct('Dividers', {{'uni', 0; 'bip', 0}}, ...
+                                        'Triggers', true, ...
+                                        'BaseSampleRate', 4000, ...
+                                        'RepairLogging', false, ...
+                                        'ImpedanceMode', false, ...
+                                        'AutoReferenceMethod', false, ...
+                                        'ReferenceMethod', 'common',...
+                                        'SyncOutDivider', 4000, ...
+                                        'SyncOutDutyCycle', 500);
+            end
+
+            for ii = 1:numel(obj)
+                enableChannels(obj(ii), obj(ii).channels);
+                updateDeviceConfig(obj(ii));   
+                setChannelConfig(obj(ii), config_channels);
+                setDeviceConfig(obj(ii), config_device);
+            end
+        end
+
+        function configImpedanceMode(obj, config_channels, config_device)
+            %CONFIGIMPEDANCEMODE - Helper to configure default settings for Impedance mode.
+            if nargin < 2
+                config_channels = struct('uni',1:64, ...
+                                      'bip', 0, ...
+                                      'dig', 0, ...
+                                      'aux', 0, ...
+                                      'acc', 0);
+            end
+            if nargin < 3
+                config_device = struct('ImpedanceMode', true, ... 
+                          'ReferenceMethod', 'common', ...
+                          'Triggers', false, ...
+                          'Dividers', {{'uni', 0; 'bip', -1}});
+            end            
+            for ii = 1:numel(obj)
+                setChannelConfig(obj(ii), config_channels);
+                setDeviceConfig(obj(ii), config_device);
+            end
         end
         
         function setDeviceConfig(obj, config)

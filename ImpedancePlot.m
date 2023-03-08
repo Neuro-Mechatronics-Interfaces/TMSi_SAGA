@@ -92,6 +92,9 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
        
        % The axes handle used
        axes_handle
+
+       % The tag associated with this impedance plot
+       tag (1,1) string
    end
     
     properties(Access = private)
@@ -127,7 +130,30 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
             %   SAGA_type [in] - Type of SAGA that is used (32+ or 64+).
             %
             % See also: Contents
-            
+
+            if ~isa(fig, 'matlab.ui.Figure')
+                if nargin > 2
+                    tag = string(channel_names);
+                else
+                    tag = "X";
+                end
+                channel_names = enabled_channels;
+                enabled_channels = fig;
+                fig = uifigure(...
+                    'Name', sprintf('Impedance Plot: SAGA-%s', tag), ...
+                    'Color', 'w', ...
+                    'Icon', 'Impedance-Symbol.png', ...
+                    'HandleVisibility', 'on', ...
+                    'Position', [100 100 400 400]);
+            else
+                tag = regexp(fig.Name, '((?<=SAGA-)\w+)', 'match');
+                if ~isempty(tag)
+                    tag = tag{1};
+                else
+                    tag = "X";
+                end
+            end
+            obj.tag = string(tag);
             obj.channels = enabled_channels + 1; % skip the CREF channel
             obj.channel_names = channel_names;        
             obj.num_channels = 64;
@@ -151,6 +177,7 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
         end
         
         function delete(obj)
+            %DELETE Overload delete to ensure figure deletion.
             try
                 delete(obj.figure_handle);
             catch
@@ -319,6 +346,16 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
 
             obj.figure_handle.Visible = 'off';            
             obj.is_visible = false;
+        end
+    
+        function tf = is_fig_valid(obj)
+            %IS_FIG_VALID  Returns true if the figure handle hasn't been closed yet.
+            tf = false(size(obj));
+            for ii = 1:numel(obj)
+                if ~isempty(obj.figure_handle)
+                    tf(ii) = isvalid(obj.figure_handle);
+                end
+            end
         end
     end
     

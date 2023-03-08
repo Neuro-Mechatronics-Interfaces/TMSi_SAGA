@@ -229,6 +229,17 @@ classdef Channel < TMSiSAGA.HiddenHandle
             obj.device.out_of_sync = true;
         end
 
+        function setDeviceTag(obj, saga)
+            %SETDEVICETAG - Sets the device tag associated with this channel.
+            %
+            % setDeviceTag(obj, saga);
+            %
+            % saga - "A" or "B" (some identifier)
+            for ii = 1:numel(obj)
+                obj(ii).saga = saga;
+            end
+        end
+
         function setUnitName(obj, unit_name)
             %SETUNITNAME - A function to set the unit name for this channel.
             %
