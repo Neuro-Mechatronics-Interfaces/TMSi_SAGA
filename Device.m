@@ -332,23 +332,23 @@ classdef Device < TMSiSAGA.HiddenHandle
         
         function delete(obj)
             %DELETE - Overloaded `delete` to ensure device wrapper shuts down gracefully.
-            try
+            try %#ok<*TRYNC> 
                 obj.stop();
-            catch me_stop
-                try
-                    obj.disconnect();
-                    return;
-                catch me_dc
-                    db.print_error_message(me_dc, 'last_error_stack__dc');
-                end
-                % Only print this if we couldn't disconnect.
-                db.print_error_message(me_stop, 'last_error_stack__stop');
+%             catch me_stop
+%                 try
+%                     obj.disconnect();
+%                     return;
+%                 catch me_dc
+%                     db.print_error_message(me_dc, 'last_error_stack__dc');
+%                 end
+%                 % Only print this if we couldn't disconnect.
+%                 db.print_error_message(me_stop, 'last_error_stack__stop');
             end
             
             try
                 obj.disconnect();
-            catch me_dc
-                db.print_error_message(me_dc, 'last_error_stack__dc');
+%             catch me_dc
+%                 db.print_error_message(me_dc, 'last_error_stack__dc');
             end 
         end
         

@@ -10,7 +10,7 @@ classdef DeviceLib < TMSiSAGA.HiddenHandle
         end
         
         function result = trace()
-            result = true;
+            result = false;
         end
 
         function device_list = getDeviceList(ds_interface_type, dr_interface_type, maxNumOfRetries, max_num_devices)
@@ -87,14 +87,14 @@ classdef DeviceLib < TMSiSAGA.HiddenHandle
 
         function handle = closeDevice(handle)
             %CLOSEDEVICE - Closes the device associated to the handle.
-
-            if TMSiSAGA.DeviceLib.trace()
-                fprintf(1, 'closeDevice\n');
+            verbose = TMSiSAGA.DeviceLib.trace();
+            if verbose
+                fprintf(1, '[TMSiSAGA.DeviceLib]\t->\tcloseDevice\n');
             end
             
             % Call dll function
             status = calllib(TMSiSAGA.DeviceLib.alias(), 'TMSiCloseDevice', handle);
-            if status ~= 0
+            if (status ~= 0) && verbose
                 throw(MException('DeviceLib:closeDevice', 'failed because of %s', ...
                     TMSiSAGA.TMSiUtils.getErrorString(status)));
             end

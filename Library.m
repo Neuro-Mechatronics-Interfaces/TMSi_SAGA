@@ -312,20 +312,20 @@ classdef Library < TMSiSAGA.HiddenHandle
             %
             %   obj [in] - Library object.
             %          
-            try
+            try %#ok<*TRYNC> 
                 obj.stopSamplingOnAllDevices();
-            catch me
-                fprintf(1, '\t->\tFailed to stop device sampling with following error message: <strong>%s</strong>\n', me.message);
+%             catch me
+%                 fprintf(1, '\t->\tFailed to stop device sampling with following error message: <strong>%s</strong>\n', me.message);
             end
             try
                 obj.disconnectAllDevices();
-            catch me
-                fprintf(1, '\t->\tFailed disconnect with following error message: <strong>%s</strong>\n', me.message);
+%             catch me
+%                 fprintf(1, '\t->\tFailed disconnect with following error message: <strong>%s</strong>\n', me.message);
             end
             try
                 TMSiSAGA.Library.unloadLibrary();
-            catch me
-                fprintf(1, '\t->\tFailed to unload library with following error message: <strong>%s</strong>\n', me.message);
+%             catch me
+%                 fprintf(1, '\t->\tFailed to unload library with following error message: <strong>%s</strong>\n', me.message);
             end
         end
     end
