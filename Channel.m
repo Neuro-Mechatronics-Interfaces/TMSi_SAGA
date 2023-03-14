@@ -576,31 +576,43 @@ classdef Channel < TMSiSAGA.HiddenHandle
 
             % Validation functions
             setTypeValidator = @(in)isa(in, 'enum.TMSiChannelSet');
-            ChannelSetsFolderValidator = @(in)((isstring(in)||ischar(in)) && (exist(in,'dir')~=0) && (~isempty(dir(fullfile(in, '*.mat')))));
-            if nargin < 3
-                assert(ChannelSetsFolderValidator(ChannelSetsDefault), ...
+            ChannelSetsFolderParamValidator = @(in)((isstring(in)||ischar(in)) && (exist(in,'dir')~=0) && (~isempty(dir(fullfile(in, '*.mat')))));
+            if (nargin < 2) || ~ismember('ChannelSetsFolder', varargin(1:3:end))
+                assert(ChannelSetsFolderParamValidator(ChannelSetsDefault), ...
                     'TMSiSAGA:Channel:EmptyChannelSetsFolder', ...
                     'No *.mat files found in default ChannelSetsFolder (%s).', ...
                     ChannelSetsDefault);
             end
+            TagParamValidator = @(in)((isstring(in) || ischar(in)) && ismember(char(in), {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'}));
 
             % Handle default
-            if nargin < 1
+            if (nargin < 1) || isempty(setType)
                 setType = enum.TMSiChannelSet.NHP_EMG;
+            elseif ischar(setType) || isstring(setType)
+                if ~ismember(char(setType), {'NHP_EMG', 'NHP'})
+                    firstParam = char(setType);
+                    setType = enum.TMSiChannelSet.NHP_EMG;
+                    varargin = [firstParam, varargin];
+                else
+                    setType = enum.TMSiChannelSet.(setType);
+                end
             end
 
             % Parse inputs
             p = inputParser();
             p.addRequired('setType', setTypeValidator);
-            p.addParameter('ChannelSetsFolder', ChannelSetsDefault, ChannelSetsFolderValidator);
+            p.addParameter('ChannelSetsFolder', ChannelSetsDefault, ChannelSetsFolderParamValidator);
+            p.addParameter('Tag', 'A', TagParamValidator);
             p.parse(enum.TMSiChannelSet(setType), varargin{:});
             pname = p.Results.ChannelSetsFolder;
             switch p.Results.setType
                 case enum.TMSiChannelSet.NHP_EMG
-                    channels = getfield(load(fullfile(pname, 'NHP_EMG.mat'), 'channels'), 'channels');
+                    ch = getfield(load(fullfile(pname, 'NHP_EMG.mat'), 'channels'), 'channels');
                 otherwise
                     error("Unhandled TMSiChannelSet enumeration: %s", string(p.Results.setType));
             end
+            setSAGA(ch, p.Results.Tag);
+            channels = toCell(ch);
         end
     end
 end
