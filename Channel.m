@@ -527,5 +527,80 @@ classdef Channel < TMSiSAGA.HiddenHandle
                 result = result ./ (10^double(obj.exponent));
             end
         end
+    
+        function channels = toCell(obj)
+            %TOCELL  Returns cell array of channels from array of Channel objects.
+            %
+            % Syntax:
+            %   channels = toCell(channelObjArray);
+            %
+            % Output:
+            %   channels - Cell array with same size as input array. If
+            %               input is a scalar Channel object, then the
+            %               returned output is a 1x1 cell with that object
+            %               in it. Corresponding elements of the returned
+            %               cell array match to the original elements of
+            %               the Channel object array.
+            %
+            % See also: Contents
+            channels = cell(size(obj));
+            for iCh = 1:numel(obj)
+                channels{iCh} = obj(iCh);
+            end
+        end
+    end
+
+    methods (Static)
+        function channels = DefaultSet(setType, varargin)
+            %DEFAULTSET  Returns default cell array of channels
+            %
+            % Syntax:
+            %   channels = TMSiSAGA.Channel.DefaultSet();
+            %   channels = TMSiSAGA.Channel.DefaultSet(setType);
+            %   channels = TMSiSAGA.Channel.DefaultSet(setType,'Name',value,...);
+            %
+            % Inputs:
+            %   setType - The channel-set type. See options in
+            %               `enum.TMSiChannelSet`. If not given, then the
+            %               default value of this is
+            %                   enum.TMSiChannelSet.NHP_EMG
+            %   'Name',value pairs:
+            %       + 'ChannelSetsFolder' - Default is the package folder
+            %                               with sub-folder 'ChannelSets'
+            %
+            % See also: Contents, enum, enum.TMSiChannelSet
+            
+            % For file i/o
+            base_file_folder = fileparts(mfilename('fullpath'));
+            ChannelSetsDefault = fullfile(base_file_folder, 'ChannelSets');
+
+            % Validation functions
+            setTypeValidator = @(in)isa(in, 'enum.TMSiChannelSet');
+            ChannelSetsFolderValidator = @(in)((isstring(in)||ischar(in)) && (exist(in,'dir')~=0) && (~isempty(dir(fullfile(in, '*.mat')))));
+            if nargin < 3
+                assert(ChannelSetsFolderValidator(ChannelSetsDefault), ...
+                    'TMSiSAGA:Channel:EmptyChannelSetsFolder', ...
+                    'No *.mat files found in default ChannelSetsFolder (%s).', ...
+                    ChannelSetsDefault);
+            end
+
+            % Handle default
+            if nargin < 1
+                setType = enum.TMSiChannelSet.NHP_EMG;
+            end
+
+            % Parse inputs
+            p = inputParser();
+            p.addRequired('setType', setTypeValidator);
+            p.addParameter('ChannelSetsFolder', ChannelSetsDefault, ChannelSetsFolderValidator);
+            p.parse(enum.TMSiChannelSet(setType), varargin{:});
+            pname = p.Results.ChannelSetsFolder;
+            switch p.Results.setType
+                case enum.TMSiChannelSet.NHP_EMG
+                    channels = getfield(load(fullfile(pname, 'NHP_EMG.mat'), 'channels'), 'channels');
+                otherwise
+                    error("Unhandled TMSiChannelSet enumeration: %s", string(p.Results.setType));
+            end
+        end
     end
 end
