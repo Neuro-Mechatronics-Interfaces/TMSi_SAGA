@@ -61,6 +61,12 @@ classdef Library < TMSiSAGA.HiddenHandle
         sampling_devices 
     end
 
+    methods (Static)
+        function tf = verbose()
+            tf = false; % Set verbosity flag this way
+        end
+    end
+
     methods
         function obj = Library()
             %LIBRARY - Initialize the library 
@@ -337,7 +343,9 @@ classdef Library < TMSiSAGA.HiddenHandle
         
         function loadLibrary()
             if TMSiSAGA.Library.isLoaded()
-                disp('Library is already loaded.');
+                if TMSiSAGA.Library.verbose()
+                    fprintf(1,'\t\t[TMSiSAGA]::[Library]\tLibrary is already loaded.\n');
+                end
             else
                 loadlibrary('TMSiSagaDeviceLib.dll', @TMSiSAGA.TMSiSagaDeviceLib64);
             end
@@ -347,7 +355,9 @@ classdef Library < TMSiSAGA.HiddenHandle
             if TMSiSAGA.Library.isLoaded()
                 unloadlibrary TMSiSagaDeviceLib;
             else
-                disp('Library was not loaded.');
+                if TMSiSAGA.Library.verbose()
+                    fprintf(1,'\t\t[TMSiSAGA]::[Library]\tLibrary was not loaded.\n');
+                end
             end
         end
     end

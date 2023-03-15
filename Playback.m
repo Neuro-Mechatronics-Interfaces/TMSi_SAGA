@@ -127,7 +127,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 expr = fullfile(p, strcat(f, '*'));
                 F = dir(expr);
                 if isempty(F)
-                    error("[PLAYBACK]\tNo files matched expression: %s", expr);
+                    error("[TMSiSAGA]::[Playback]\tNo files matched expression: %s", expr);
                 end
                 if F(1).isdir
                     e = ".poly5";
@@ -158,21 +158,22 @@ classdef Playback < TMSiSAGA.HiddenHandle
                     end
                     self.channels = vertcat(x.channels{:});
                 otherwise
-                    error("[PLAYBACK]\tUnsupported format: %s (should be '.mat' or '.poly5')", e);
+                    error("[TMSiSAGA]::[Playback]\tUnsupported format: %s (should be '.mat' or '.poly5')", e);
             end
-            clear x;
             finfo = strsplit(f, '_');
             if numel(finfo) >= 6
                 self.tag = string(finfo{5});
             end
 
             self.index_step_size = round(self.sample_rate/self.queue_update_rate);
+            T = 1/self.queue_update_rate;
             self.timer = timer('ExecutionMode', 'fixedRate', ...
                 'BusyMode', 'queue', ...
-                'Period', 1, ...
+                'Period', round(max(T-3, 0.25*T),3), ...
                 'UserData', struct('sample_queue', [], 'cur_index', self.cur_index), ...
-                'TimerFcn', @(~,~)fprintf(1,"[PLAYBACK]\tTMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag), ...
+                'TimerFcn', @self.increment_and_queue, ...
                 'Tag', sprintf('TMSiSAGA.Playback.%s.timer', self.tag));
+            self.is_connected = true;
         end
 
         function load_new(self, fname)
@@ -195,7 +196,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 expr = fullfile(p, strcat(f, '*'));
                 F = dir(expr);
                 if isempty(F)
-                    error("[PLAYBACK]\tNo files matched expression: %s", expr);
+                    error("[TMSiSAGA]::[Playback]\tNo files matched expression: %s", expr);
                 end
                 if F(1).isdir
                     e = ".poly5";
@@ -226,7 +227,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                     end
                     self.channels = vertcat(x.channels{:});
                 otherwise
-                    error("[PLAYBACK]\tUnsupported format: %s (should be '.mat' or '.poly5')", e);
+                    error("[TMSiSAGA]::[Playback]\tUnsupported format: %s (should be '.mat' or '.poly5')", e);
             end
             finfo = strsplit(f, '_');
             if numel(finfo) >= 6
@@ -250,13 +251,19 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 end
                 return;
             end
+            if self.is_connected
+                if self.verbose
+                    fprintf(1,'[TMSiSAGA]::[Playback]\tTMSiSAGA.Playback-%s is already connected.\n', self.tag);
+                end
+                return;
+            end
             self.load_new(self.fname);
             T = 1/self.queue_update_rate;
             self.timer.Period = round(max(T-3, 0.25*T),3);
             self.timer.TimerFcn = @self.increment_and_queue;
             self.is_connected = true;
             if self.verbose
-                fprintf(1,'[PLAYBACK]\tConnected to TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
+                fprintf(1,'[TMSiSAGA]::[Playback]\tConnected to TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
             end
 
         end
@@ -270,10 +277,10 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 return;
             end
             self.timer.Period = 1;
-            self.timer.TimerFcn = @(~,~)fprintf(1,"[PLAYBACK]\tTMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag);
+            self.timer.TimerFcn = @(~,~)fprintf(1,"[TMSiSAGA]::[Playback]\tTMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag);
             self.is_connected = false;
             if self.verbose
-                fprintf(1,'[PLAYBACK]\tDisconnected from TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
+                fprintf(1,'[TMSiSAGA]::[Playback]\tDisconnected from TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
             end
 
         end
@@ -323,7 +330,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 start(self(ii).timer);
                 self(ii).is_sampling = true;
                 if self(ii).verbose
-                    fprintf(1,'[PLAYBACK]\tStarted TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[TMSiSAGA]::[Playback]\tStarted TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -335,7 +342,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 self(ii).is_sampling = false;
                 self(ii).is_recording = false;
                 if self(ii).verbose
-                    fprintf(1,'[PLAYBACK]\tStopped TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[TMSiSAGA]::[Playback]\tStopped TMSi.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -417,7 +424,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
             %UPDATEDEVICECONFIG  This literally does nothing
             for ii = 1:numel(self)
                 if self(ii).verbose
-                    fprintf(1,'[PLAYBACK]\tUpdated config for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[TMSiSAGA]::[Playback]\tUpdated config for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -426,7 +433,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
             %SETCHANNELCONFIG  Does nothing, just for `Device` compatibility
             for ii = 1:numel(self)
                 if self(ii).verbose
-                    fprintf(1,'[PLAYBACK]\tSet channel configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[TMSiSAGA]::[Playback]\tSet channel configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
@@ -446,7 +453,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                     self(ii).impedance_mode = config(ii).ImpedanceMode;
                 end
                 if self(ii).verbose
-                    fprintf(1,'[PLAYBACK]\tSet device configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
+                    fprintf(1,'[TMSiSAGA]::[Playback]\tSet device configs for TMSiSAGA.Playback-%s (%s)\n', self(ii).tag, self(ii).name);
                 end
             end
         end
