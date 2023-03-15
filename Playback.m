@@ -52,7 +52,6 @@ classdef Playback < TMSiSAGA.HiddenHandle
     properties (Hidden)
         cur_index (1,1) double = 1;
         index_step_size (1,1) double
-        sample_queue (1,:) double  % Queue of sample indices to return with next `sample` call
     end
 
     properties (GetAccess = public, SetAccess = protected)
@@ -65,8 +64,8 @@ classdef Playback < TMSiSAGA.HiddenHandle
         samples
         serial_number (1,1) double = 42;
         timer
-        max_buffer_samples (1,1) double = 16000
-        queue_update_rate (1,1) double = 100;
+        max_buffer_samples (1,1) double = 8000
+        queue_update_rate (1,1) double = 250; % Hz
         num_samples
     end
 
@@ -167,11 +166,12 @@ classdef Playback < TMSiSAGA.HiddenHandle
 
             self.index_step_size = round(self.sample_rate/self.queue_update_rate);
             T = 1/self.queue_update_rate;
-            self.timer = timer('ExecutionMode', 'fixedRate', ...
+            self.timer = timer(...
+                'ExecutionMode', 'singleShot', ...
                 'BusyMode', 'queue', ...
-                'Period', round(max(T-3, 0.25*T),3), ...
+                'StartDelay', T, ...
                 'UserData', struct('sample_queue', [], 'cur_index', self.cur_index), ...
-                'TimerFcn', @self.increment_and_queue, ...
+                'TimerFcn', @self.connected_timer_cb, ...
                 'Tag', sprintf('TMSiSAGA.Playback.%s.timer', self.tag));
             self.is_connected = true;
         end
@@ -259,8 +259,8 @@ classdef Playback < TMSiSAGA.HiddenHandle
             end
             self.load_new(self.fname);
             T = 1/self.queue_update_rate;
-            self.timer.Period = round(max(T-3, 0.25*T),3);
-            self.timer.TimerFcn = @self.increment_and_queue;
+            self.timer.Period = T;
+            self.timer.TimerFcn = @self.connected_timer_cb;
             self.is_connected = true;
             if self.verbose
                 fprintf(1,'[TMSiSAGA]::[Playback]\tConnected to TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
@@ -277,7 +277,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 return;
             end
             self.timer.Period = 1;
-            self.timer.TimerFcn = @(~,~)fprintf(1,"[TMSiSAGA]::[Playback]\tTMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag);
+            self.timer.TimerFcn = @self.disconnected_timer_cb;
             self.is_connected = false;
             if self.verbose
                 fprintf(1,'[TMSiSAGA]::[Playback]\tDisconnected from TMSiSAGA.Playback-%s (%s)\n', self.tag, self.name);
@@ -460,14 +460,21 @@ classdef Playback < TMSiSAGA.HiddenHandle
     end
 
     methods (Hidden,Access=public)
-        function increment_and_queue(self,src,~)
-            %INCREMENT_AND_QUEUE  This is the callback actually running the playback class.
+        function disconnected_timer_cb(self, ~, ~)
+            %DISCONNECTED_TIMER_CB  Callback for TimerFcn when "disconnected."
+            fprintf(1,"[TMSiSAGA]::[Playback]\tTMSiSAGA.Playback.%s :: Sampling but not connected?", self.tag);
+        end
+
+        function connected_timer_cb(self,src,~)
+            %CONNECTED_TIMER_CB  Callback for TimerFcn when "connected" (actually core running the playback class).
+            stop(src);
             next_samples = mod((src.UserData.cur_index:(src.UserData.cur_index+self.index_step_size-1))-1, self.num_samples)+1;
             src.UserData.sample_queue = horzcat(src.UserData.sample_queue, next_samples);
             if numel(src.UserData.sample_queue) > self.max_buffer_samples
                 src.UserData.sample_queue = src.UserData.sample_queue((end-(self.max_buffer_samples+1)):end);
             end
             src.UserData.cur_index = mod(src.UserData.cur_index+self.index_step_size-1, self.num_samples)+1;
+            start(src);
         end
     end
 end
