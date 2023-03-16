@@ -122,7 +122,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
             end
             self.fname = fname;
             [p,f,e] = fileparts(fname);
-            if isempty(e)
+            if strlength(e)==0
                 expr = fullfile(p, strcat(f, '*'));
                 F = dir(expr);
                 if isempty(F)
@@ -192,7 +192,7 @@ classdef Playback < TMSiSAGA.HiddenHandle
                 fname = self.fname;
             end
             [p,f,e] = fileparts(fname);
-            if isempty(e)
+            if strlength(e)==0
                 expr = fullfile(p, strcat(f, '*'));
                 F = dir(expr);
                 if isempty(F)
