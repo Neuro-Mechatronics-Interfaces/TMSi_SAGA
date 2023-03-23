@@ -275,6 +275,17 @@ classdef DeviceLib < TMSiSAGA.HiddenHandle
             data_type = data_type.Value;
         end
 
+        function num_sets = getDeviceDataBuffered(handle)
+            %GETDEVICEDATABUFFERED  - Retrieve the number of sample sets that are currently waiting to be sampled from the device sample buffer.
+            num_sets = libpointer('int32Ptr', 0);
+            status = callib(TMSiSAGA.DeviceLib.alias(), 'TMSiGetDeviceDataBuffered', handle, num_sets);
+            if status ~= 0
+                throw(MException('DeviceLib:getDeviceDataBuffered', 'failed because of %s', ...
+                    TMSiSAGA.TMSiUtils.getErrorString(status)));
+            end
+            num_sets = num_sets.Value;
+        end
+
         function sensors = getDeviceSensors(handle, num_sensors)
             %GETDEVICESENSORS - Obtain a list from the device that states 
             %   which channels are sensor channels.

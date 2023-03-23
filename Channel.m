@@ -92,11 +92,11 @@ classdef Channel < TMSiSAGA.HiddenHandle
     end
 
     methods
-        function obj = Channel(device, channel_info, number)
+        function obj = Channel(device, channel_info, tag, number)
             %CHANNEL - Constructor for the Channel object.
             %
             %   obj = Channel(device, channel_info)
-            %   obj = Channel(device, channel_info, number);
+            %   obj = Channel(device, channel_info, tag, number);
             %
             %   Constructor for the Channel object. Requires a device, and the raw channel info structure
             %   from the TMSi device. It is not recommended to create a channel directly.
@@ -104,16 +104,20 @@ classdef Channel < TMSiSAGA.HiddenHandle
             %   obj [out] - Channel object.
             %   device [in] - The device for which the channel object is created.
             %   channel_info [in] - Basic channel information, should be gotten from the device.
-            %
+            %   tag [in] - SAGA tag ("A" or "B"; default is "X")
 
             if nargin < 3
+                tag = "X";
+            end
+
+            if nargin < 4
                 obj = repmat(obj, size(channel_info));
                 for ii = 1:numel(channel_info)
-                    obj(ii) = TMSiSAGA.Channel(device, channel_info(ii), ii - 1);
+                    obj(ii) = TMSiSAGA.Channel(device, channel_info(ii), tag, ii - 1);
                 end
                 return;
             end
-%             obj.device = device;
+            obj.saga = tag;
             obj.number = int64(number);
             obj.type = int64(channel_info.ChannelType);
             obj.format = int64(channel_info.ChannelFormat);
@@ -206,8 +210,8 @@ classdef Channel < TMSiSAGA.HiddenHandle
 %             if obj.device.is_sampling
 %                 throw(MException('Channel:enable', 'Cannot enable/disable channel while device is sampling.'));
 %             end
-
-            obj.divider = obj.device.dividers(obj.type);
+            obj.divider = 0;
+%             obj.divider = obj.device.dividers(obj.type);
 %             obj.device.out_of_sync = true;
         end
 
@@ -548,6 +552,16 @@ classdef Channel < TMSiSAGA.HiddenHandle
                 channels{iCh} = obj(iCh);
             end
         end
+
+        function channels = toStruct(obj)
+            %TOSTRUCT  Returns as a struct array 
+            channels = struct();
+            for i=1:numel(obj)
+                channels(i).ChanNr = obj(i).number;
+                channels(i).ChanDivider = obj(i).divider;                
+                channels(i).AltChanName = obj.channels(i).alternative_name;
+            end
+        end
     end
 
     methods (Static)
@@ -602,7 +616,7 @@ classdef Channel < TMSiSAGA.HiddenHandle
             p = inputParser();
             p.addRequired('setType', setTypeValidator);
             p.addParameter('ChannelSetsFolder', ChannelSetsDefault, ChannelSetsFolderParamValidator);
-            p.addParameter('Tag', 'A', TagParamValidator);
+            p.addParameter('Tag', 'X', TagParamValidator);
             p.parse(enum.TMSiChannelSet(setType), varargin{:});
             pname = p.Results.ChannelSetsFolder;
             switch p.Results.setType

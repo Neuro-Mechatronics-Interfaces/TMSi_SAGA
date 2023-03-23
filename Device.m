@@ -168,6 +168,8 @@ classdef Device < TMSiSAGA.HiddenHandle
         impedance_file_expr
         data_file_expr
         recording_index = -1
+
+        verbose = 0
     end
     
     properties (GetAccess = public, SetAccess = protected)
@@ -197,6 +199,270 @@ classdef Device < TMSiSAGA.HiddenHandle
     
     methods (Access = private)
         
+        function setChannelConfig_(obj, channelConfig)
+            %SETCHANNELCONFIG_ - Function that applies the specified channel configuration.
+            %
+            %   setChannelConfig_(obj, ChannelConfig)
+            %
+            %   Function that applies a specified channel configuration.
+            %   When a channel is not present in the specified
+            %   configuration, the channel will be disabled.
+            %
+            %   obj [in] - Device object.
+            %   ChannelConfig [in] - Desired channel configuration. 
+            % 
+            %   ChannelConfig may contain the following name/value pairs:
+            %   ChannelConfig.uni - UNI channels, 1-32 for SAGA 32+ or 1-64 
+            %       for SAGA 64+
+            %   ChannelConfig.bip - BIP channels, 1-4
+            %   ChannelConfig.aux - AUX channels, 1-9
+            %   ChannelConfig.acc - internal accelerometer channels 0 or 1 
+            %       for disable/enable
+            %   ChannelConfig.dig - DIGI configuration, 0 for DIGI Trigger 
+            %       or 1 saturation sensor
+            
+            if numel(obj) > 1
+                if numel(channelConfig) == 1
+                    channelConfig = repmat(channelConfig, size(obj));
+                end
+                for ii = 1:numel(obj)
+                    setChannelConfig_(obj(ii), channelConfig(ii));
+                end
+                return;
+            end
+            % Check what type of channels need to be configured.
+            if ~isfield(channelConfig, 'uni')
+                channelConfig.uni=0;
+            end
+            if ~isfield(channelConfig, 'bip')
+                channelConfig.bip=0;
+            end
+            if ~isfield(channelConfig, 'aux')
+                channelConfig.aux=0;
+            end
+            if ~isfield(channelConfig, 'acc')
+                channelConfig.acc=0;
+            end
+            if ~isfield(channelConfig, 'dig')
+                channelConfig.dig=0;
+            end
+            
+            count_UNI = 0;
+            count_BIP = 0;
+            count_AUX = 0;
+            count_Dig = 0;
+            
+            % Enable used channels
+            for i=1:length(obj.channels)
+                % Enable desired BIP channels
+                if (obj.channels(i).isBip())
+                    count_BIP = count_BIP + 1;
+                    if ismember(count_BIP, channelConfig.bip)
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                    % Enable desired UNI (ExG) channels
+                elseif (obj.channels(i).isExG())
+                    count_UNI = count_UNI + 1;
+                    if ismember(count_UNI, channelConfig.uni + 1) && ~strcmp(obj.channels(i).name,'CREF') %+1 for CREF channel
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                    % Enable desired AUX channels
+                elseif (obj.channels(i).isAux())
+                    count_AUX = count_AUX + 1;
+                    if ismember(count_AUX, channelConfig.aux)
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                    % Enable desired Digital/sensor channels
+                elseif (obj.channels(i).isDig())
+                    count_Dig=count_Dig+1;
+                    if channelConfig.dig&&(count_Dig>1)&&(count_Dig<=5) %Enable saturation channels
+                        obj.enableChannels(i);
+                    elseif channelConfig.acc&&(count_Dig>5)&&(count_Dig<=8)%Enable accelerometer channels
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                end
+            end         
+                        
+            % Update the device configuration
+%             obj.updateDeviceConfig();
+        end
+
+        function setDeviceConfig_(obj, config)
+            %SETDEVICECONFIG_ - Set the device configuration to the desired
+            %    settings.
+            %
+            %   setDeviceConfig_(obj, config)
+            %
+            %   Method takes a single struct as input which contains
+            %   information on which configuration settings to update and
+            %   to what value.
+            %
+            %   obj [in] - Device object.
+            %   config [in] - Struct containing keyword-value combinations 
+            %       to update the device configuration
+            %
+            %   The following keywords are used to update the device 
+            %   configuration. All parameters are optional:
+            %
+            %   - ImpedanceMode - Turn on/off impedance mode.
+            %       Input: true/false
+            %
+            %   - Dividers - Set the dividers to configure the sample
+            %   rate for a given type of sensor (base_sample_rate /
+            %   2^divider).
+            %       Input: Cell array with channel type
+            %       ('exg'/'bip'/'aux'/'dig') and integer value.
+            %
+            %   - BaseSampleRate - Change base sample rate of the
+            %   device.
+            %       Input: 4000/4096.
+            %
+            %   - Triggers - Turn on/off triggers.
+            %       Input: true/false
+            %
+            %   - ReferenceMethod - Sets the reference method used by
+            %   the device. Common Reference mode uses a single channel,
+            %   average reference mod uses the average of all connected
+            %   channels to determine the reference.
+            %       Input: 'common'/'average'
+            %
+            %   - AutoReferenceMethod - Sets whether the device will
+            %   automatically change from common reference mode to average
+            %   reference mode when the common reference channel is
+            %   disconnected.
+            %       Input: true/false
+            %
+            %   - RepairLogging - Turns repair logging on or off, so
+            %   that missing samples can be retrieved later on.
+            %       Input: true/false
+            %
+            %   - SyncOutDivider - Sets the sync out divider
+            %   of the Data Recorder. (sample_rate / SyncOutDivider)
+            %       Input: Integer, maximum frequency is Fs/8.
+            %
+            %   - SyncOutDutyCycle - Sets the duty cycle of
+            %   the Data Recorder.
+            %       Input: Integer, between 125 and 875 (12.5% to 87.5%)
+            %
+            %EXAMPLE:
+            %   % Update the device configuration to sample all unipolar
+            %   % channels at 2000 Hz and all bipolar channels at 1000 Hz.
+            %   config = struct('BaseSampleRate', 4000, ...
+            %                   'Dividers', {{'exg', 1; 'bip', 2;}});
+            %   device.setDeviceConfig(config);
+            
+            if numel(obj) > 1
+                if numel(config) ~= numel(obj)
+                    if ~iscell(config)
+                        config = repmat({config}, size(obj));
+                    else
+                        config = repmat(config, size(obj));
+                    end
+                end
+                for ii = 1:numel(obj)
+                    obj(ii).setDeviceConfig_(config{ii});
+                end
+                return;
+            end
+            
+            % Device configuration can only be set when the device is
+            % connected and not sampling.
+            if (~obj.is_connected)
+                throw(MException('Device:setDeviceConfig_', 'Device has not been connected.'));
+            end
+            
+            if (obj.is_sampling)
+                throw(MException('Device:setDeviceConfig_', 'Cannot change data recorder configuration while sampling.'));
+            end
+            
+            % Set the ImpedanceMode
+            if isfield(config, 'ImpedanceMode')                
+                obj.impedance_mode = logical(config.ImpedanceMode);
+                obj.out_of_sync = true;
+            end
+            
+            % Set the Dividers
+            if isfield(config, 'Dividers')
+                for i = 1:size(config.Dividers,1)
+                    if ~isa(config.Dividers{i,1}, 'char')
+                        throw(MException('Device:setDividers', 'Divider argument type should be a string.'));
+                    end
+                    
+                    obj.dividers(TMSiSAGA.TMSiUtils.toChannelTypeNumber(config.Dividers{i,1})) = config.Dividers{i,2};
+                end
+                obj.out_of_sync = true;
+            end
+            
+            % Set the BaseSampleRate
+            if isfield(config, 'BaseSampleRate')
+                if config.BaseSampleRate ~= 4000 && config.BaseSampleRate ~= 4096
+                    throw(MException('Device:setBaseSampleRate', 'Currently only sample rates of 4000 and 4096 are supported as base sample rate.'));
+                end
+                obj.configuration.base_sample_rate = config.BaseSampleRate;
+                
+                obj.out_of_sync = true;
+            end
+            
+            % Set the Triggers
+            if isfield(config, 'Triggers')
+                if ~isa(config.Triggers, 'logical')
+                    throw(MException('Device:setTriggers', 'Triggers argument should be true or false.'));
+                end
+                
+                obj.configuration.triggers = config.Triggers;
+                
+                obj.out_of_sync = true;
+            end
+            
+            % Set the ReferenceMethod
+            if isfield(config, 'ReferenceMethod')
+                if ~isa(config.ReferenceMethod, 'char')
+                    throw(MException('Device:setReferenceMethod', 'Reference method argument should be a string (common, average).'));
+                end
+                
+                if ~strcmp(config.ReferenceMethod, 'common') && ~strcmp(config.ReferenceMethod, 'average')
+                    throw(MException('Device:setReferenceMethod', 'Reference method argument should be common or average.'));
+                end
+                
+                obj.configuration.reference_method = config.ReferenceMethod;
+                
+                obj.out_of_sync = true;
+            end
+            
+            % Set the AutoReferenceMethod
+            if isfield(config, 'AutoReferenceMethod')                
+                obj.configuration.auto_reference_method = logical(config.AutoReferenceMethod);
+                obj.out_of_sync = true;
+            end
+            
+            % Set the RepairLogging
+            if isfield(config, 'RepairLogging')
+                obj.configuration.repair_logging = logical(config.RepairLogging);
+                obj.out_of_sync = true;
+            end
+            
+            % Set the SyncOutDivider
+            if isfield(config, 'SyncOutDivider')
+                obj.data_recorder.sync_out_divider = config.SyncOutDivider;
+                obj.out_of_sync = true;                
+            end
+            
+            % Set the SyncOutDutyCycle
+            if isfield(config, 'SyncOutDutyCycle')
+                obj.data_recorder.sync_out_duty_cycle = config.SyncOutDutyCycle;
+                obj.out_of_sync = true;  
+            end
+        end
+
+
         function updateDeviceConfig_(obj, perform_factory_reset, store_as_default, web_interface_control)
             if ~exist('perform_factory_reset', 'var')
                 perform_factory_reset = 0;
@@ -334,21 +600,10 @@ classdef Device < TMSiSAGA.HiddenHandle
             %DELETE - Overloaded `delete` to ensure device wrapper shuts down gracefully.
             try %#ok<*TRYNC> 
                 obj.stop();
-%             catch me_stop
-%                 try
-%                     obj.disconnect();
-%                     return;
-%                 catch me_dc
-%                     db.print_error_message(me_dc, 'last_error_stack__dc');
-%                 end
-%                 % Only print this if we couldn't disconnect.
-%                 db.print_error_message(me_stop, 'last_error_stack__stop');
             end
             
             try
                 obj.disconnect();
-%             catch me_dc
-%                 db.print_error_message(me_dc, 'last_error_stack__dc');
             end 
         end
         
@@ -532,11 +787,12 @@ classdef Device < TMSiSAGA.HiddenHandle
             obj.is_sampling = true;
             
             % Inform user on start of sampling
-            TMSiSAGA.TMSiUtils.info(obj.name, 'started sampling from device')
-            TMSiSAGA.TMSiUtils.info(obj.name, ['    autoswitch=' num2str(obj.configuration.auto_reference_method)])
-            TMSiSAGA.TMSiUtils.info(obj.name, ['    repair_logging=' num2str(obj.configuration.repair_logging)])
-            TMSiSAGA.TMSiUtils.info(obj.name, ['    avr_ref_calc=' num2str(~disable_avg_ref_calculation)])
-            
+            TMSiSAGA.TMSiUtils.info(obj.name, 'running')
+            if obj.verbose > 0
+                TMSiSAGA.TMSiUtils.info(obj.name, ['    autoswitch=' num2str(obj.configuration.auto_reference_method)])
+                TMSiSAGA.TMSiUtils.info(obj.name, ['    repair_logging=' num2str(obj.configuration.repair_logging)])
+                TMSiSAGA.TMSiUtils.info(obj.name, ['    avr_ref_calc=' num2str(~disable_avg_ref_calculation)])
+            end
             obj.lib.deviceStartedSampling(obj);
         end
         
@@ -586,7 +842,7 @@ classdef Device < TMSiSAGA.HiddenHandle
             obj.is_sampling = false;
             
             % Inform user that sampling has stopped
-            TMSiSAGA.TMSiUtils.info(obj.name, 'stopped sampling from device')
+            TMSiSAGA.TMSiUtils.info(obj.name, 'idle')
             
             obj.lib.deviceStoppedSampling(obj);
         end
@@ -1224,7 +1480,7 @@ classdef Device < TMSiSAGA.HiddenHandle
                 error('No possible matching serial number in SN array!');
             end
             obj.tag = TAG(idx);
-            setDeviceTag(obj.channels);
+            setDeviceTag(obj.channels, TAG(idx));
 
         end
         
@@ -1385,12 +1641,8 @@ classdef Device < TMSiSAGA.HiddenHandle
             ch_number = arrayfun(@(c)c - 1, (1:numel(channel_list))', ...
                 'UniformOutput', false);
             [channel_list.Number] = deal(ch_number{:});
-            obj.channels = TMSiSAGA.Channel(obj, channel_list);
-%             obj.channels = TMSiSAGA.Channel.empty;
+            obj.channels = TMSiSAGA.Channel(obj, channel_list, obj.tag);
             for i=1:numel(channel_list)
-%                 channel_list(i).Number = i - 1;
-%                 obj.channels(i) = TMSiSAGA.Channel(obj, channel_list(i));
-                
                 if obj.channels(i).isActive()
                     obj.num_active_channels = obj.num_active_channels + 1;
                     
@@ -1431,29 +1683,28 @@ classdef Device < TMSiSAGA.HiddenHandle
         function configStandardMode(obj, config_channels, config_device)
             %CONFIGSTANDARDMODE - Helper to configure default HD-EMG acquisition settings.
             if nargin < 2
-                config_channels = struct('uni', 1:64, ...
-                         'bip', 1:4, ...
-                         'dig', 0, ...
-                         'acc', 0, ...
-                         'aux', 1:2);
+                config_channels = struct(...
+                    'uni', 1:64, ...
+                    'bip', 1:4, ...
+                    'dig', 0, ...
+                    'acc', 0, ...
+                    'aux', 1:2);
             end
             if nargin < 3
-                config_device = struct('Dividers', {{'uni', 0; 'bip', 0}}, ...
+                config_device = struct('Dividers', {{'uni', 0; 'bip', 0; 'dig', 0; 'triggers', 0; 'aux', 0}}, ...
                                         'Triggers', true, ...
                                         'BaseSampleRate', 4000, ...
                                         'RepairLogging', false, ...
                                         'ImpedanceMode', false, ...
                                         'AutoReferenceMethod', false, ...
                                         'ReferenceMethod', 'common',...
-                                        'SyncOutDivider', 4000, ...
-                                        'SyncOutDutyCycle', 500);
+                                        'SyncOutDivider', -1);
             end
 
             for ii = 1:numel(obj)
-                enableChannels(obj(ii), obj(ii).channels);
-                updateDeviceConfig(obj(ii));   
-                setChannelConfig(obj(ii), config_channels);
-                setDeviceConfig(obj(ii), config_device);
+                setChannelConfig_(obj(ii), config_channels);
+                setDeviceConfig_(obj(ii), config_device);
+                updateDeviceConfig(obj(ii));  
             end
         end
 
@@ -1470,191 +1721,16 @@ classdef Device < TMSiSAGA.HiddenHandle
                 config_device = struct('ImpedanceMode', true, ... 
                           'ReferenceMethod', 'common', ...
                           'Triggers', false, ...
-                          'Dividers', {{'uni', 0; 'bip', -1}});
+                          'Dividers', {{'uni', 0; 'bip', -1; 'dig', -1; 'triggers', -1; 'aux', -1}});
             end            
             for ii = 1:numel(obj)
-                setChannelConfig(obj(ii), config_channels);
-                setDeviceConfig(obj(ii), config_device);
+                setChannelConfig_(obj(ii), config_channels);
+                setDeviceConfig_(obj(ii), config_device);
+                updateDeviceConfig(obj(ii));
             end
         end
         
-        function setDeviceConfig(obj, config)
-            %SETDEVICECONFIG - Set the device configuration to the desired
-            %    settings.
-            %
-            %   setDeviceConfig(obj, config)
-            %
-            %   Method takes a single struct as input which contains
-            %   information on which configuration settings to update and
-            %   to what value.
-            %
-            %   obj [in] - Device object.
-            %   config [in] - Struct containing keyword-value combinations 
-            %       to update the device configuration
-            %
-            %   The following keywords are used to update the device 
-            %   configuration. All parameters are optional:
-            %
-            %   - ImpedanceMode - Turn on/off impedance mode.
-            %       Input: true/false
-            %
-            %   - Dividers - Set the dividers to configure the sample
-            %   rate for a given type of sensor (base_sample_rate /
-            %   2^divider).
-            %       Input: Cell array with channel type
-            %       ('exg'/'bip'/'aux'/'dig') and integer value.
-            %
-            %   - BaseSampleRate - Change base sample rate of the
-            %   device.
-            %       Input: 4000/4096.
-            %
-            %   - Triggers - Turn on/off triggers.
-            %       Input: true/false
-            %
-            %   - ReferenceMethod - Sets the reference method used by
-            %   the device. Common Reference mode uses a single channel,
-            %   average reference mod uses the average of all connected
-            %   channels to determine the reference.
-            %       Input: 'common'/'average'
-            %
-            %   - AutoReferenceMethod - Sets whether the device will
-            %   automatically change from common reference mode to average
-            %   reference mode when the common reference channel is
-            %   disconnected.
-            %       Input: true/false
-            %
-            %   - RepairLogging - Turns repair logging on or off, so
-            %   that missing samples can be retrieved later on.
-            %       Input: true/false
-            %
-            %   - SyncOutDivider - Sets the sync out divider
-            %   of the Data Recorder. (sample_rate / SyncOutDivider)
-            %       Input: Integer, maximum frequency is Fs/8.
-            %
-            %   - SyncOutDutyCycle - Sets the duty cycle of
-            %   the Data Recorder.
-            %       Input: Integer, between 125 and 875 (12.5% to 87.5%)
-            %
-            %EXAMPLE:
-            %   % Update the device configuration to sample all unipolar
-            %   % channels at 2000 Hz and all bipolar channels at 1000 Hz.
-            %   config = struct('BaseSampleRate', 4000, ...
-            %                   'Dividers', {{'exg', 1; 'bip', 2;}});
-            %   device.setDeviceConfig(config);
-            
-            if numel(obj) > 1
-                if numel(config) ~= numel(obj)
-                    if ~iscell(config)
-                        config = repmat({config}, size(obj));
-                    else
-                        config = repmat(config, size(obj));
-                    end
-                end
-                for ii = 1:numel(obj)
-                    obj(ii).setDeviceConfig(config{ii});
-                end
-                return;
-            end
-            
-            % Device configuration can only be set when the device is
-            % connected and not sampling.
-            if (~obj.is_connected)
-                throw(MException('Device:setDeviceConfig', 'Device has not been connected.'));
-            end
-            
-            if (obj.is_sampling)
-                throw(MException('Device:setDeviceConfig', 'Cannot change data recorder configuration while sampling.'));
-            end
-            
-            % Set the ImpedanceMode
-            if isfield(config, 'ImpedanceMode')
-                if ~isa(config.ImpedanceMode,'logical')
-                    throw(MException('Device:SetImpedanceMode', 'ImpedanceMode argument type should be a boolean.'));
-                end
-                
-                obj.impedance_mode = config.ImpedanceMode;
-            end
-            
-            % Set the Dividers
-            if isfield(config, 'Dividers')
-                for i = 1:size(config.Dividers,1)
-                    if ~isa(config.Dividers{i,1}, 'char')
-                        throw(MException('Device:setDividers', 'Divider argument type should be a string.'));
-                    end
-                    
-                    obj.dividers(TMSiSAGA.TMSiUtils.toChannelTypeNumber(config.Dividers{i,1})) = config.Dividers{i,2};
-                end
-            end
-            
-            % Set the BaseSampleRate
-            if isfield(config, 'BaseSampleRate')
-                if config.BaseSampleRate ~= 4000 && config.BaseSampleRate ~= 4096
-                    throw(MException('Device:setBaseSampleRate', 'Currently only sample rates of 4000 and 4096 are supported as base sample rate.'));
-                end
-                obj.configuration.base_sample_rate = config.BaseSampleRate;
-                
-                obj.out_of_sync = true;
-            end
-            
-            % Set the Triggers
-            if isfield(config, 'Triggers')
-                if ~isa(config.Triggers, 'logical')
-                    throw(MException('Device:setTriggers', 'Triggers argument should be true or false.'));
-                end
-                
-                obj.configuration.triggers = config.Triggers;
-                
-                obj.out_of_sync = true;
-            end
-            
-            % Set the ReferenceMethod
-            if isfield(config, 'ReferenceMethod')
-                if ~isa(config.ReferenceMethod, 'char')
-                    throw(MException('Device:setReferenceMethod', 'Reference method argument should be a string (common, average).'));
-                end
-                
-                if ~strcmp(config.ReferenceMethod, 'common') && ~strcmp(config.ReferenceMethod, 'average')
-                    throw(MException('Device:setReferenceMethod', 'Reference method argument should be common or average.'));
-                end
-                
-                obj.configuration.reference_method = config.ReferenceMethod;
-                
-                obj.out_of_sync = true;
-            end
-            
-            % Set the AutoReferenceMethod
-            if isfield(config, 'AutoReferenceMethod')
-                if ~isa(config.AutoReferenceMethod, 'logical')
-                    throw(MException('Device:setAutoReferenceMethod', 'Change auto reference method argument should be true or false.'));
-                end
-                
-                obj.configuration.auto_reference_method = config.AutoReferenceMethod;
-            end
-            
-            % Set the RepairLogging
-            if isfield(config, 'RepairLogging')
-                if ~isa(config.RepairLogging, 'logical')
-                    throw(MException('Device:setRepairLogging', 'Repair logging argument should be true or false.'));
-                end
-                
-                obj.configuration.repair_logging = config.RepairLogging;
-            end
-            
-            % Set the SyncOutDivider
-            if isfield(config, 'SyncOutDivider')
-                obj.data_recorder.sync_out_divider = config.SyncOutDivider;
-                obj.out_of_sync = true;                
-            end
-            
-            % Set the SyncOutDutyCycle
-            if isfield(config, 'SyncOutDutyCycle')
-                obj.data_recorder.sync_out_duty_cycle = config.SyncOutDutyCycle;
-                obj.out_of_sync = true;  
-            end
-            
-            % Update the device configuration
-            obj.updateDeviceConfig();
-        end
+        
                
         function bandwidth_Mbits_sec = getCurrentBandwidth(obj)
             %GETCURRENTBANDWIDTH -  Function that calculates the current bandwidth in use
@@ -1694,103 +1770,6 @@ classdef Device < TMSiSAGA.HiddenHandle
             elseif obj.configuration.used_bandwidth < obj.configuration.interface_bandwidth && strcmp(obj.data_recorder.interface_type, 'wifi')
                 disp('[SAGA DR ] current configuration is within WiFi-bandwidth constraints.')
             end
-        end
-        
-        function setChannelConfig(obj, channelConfig)
-            %SETCHANNELCONFIG - Function that applies the specified channel configuration.
-            %
-            %   setChannelConfig(obj, ChannelConfig)
-            %
-            %   Function that applies a specified channel configuration.
-            %   When a channel is not present in the specified
-            %   configuration, the channel will be disabled.
-            %
-            %   obj [in] - Device object.
-            %   ChannelConfig [in] - Desired channel configuration. 
-            % 
-            %   ChannelConfig may contain the following name/value pairs:
-            %   ChannelConfig.uni - UNI channels, 1-32 for SAGA 32+ or 1-64 
-            %       for SAGA 64+
-            %   ChannelConfig.bip - BIP channels, 1-4
-            %   ChannelConfig.aux - AUX channels, 1-9
-            %   ChannelConfig.acc - internal accelerometer channels 0 or 1 
-            %       for disable/enable
-            %   ChannelConfig.dig - DIGI configuration, 0 for DIGI Trigger 
-            %       or 1 saturation sensor
-            
-            if numel(obj) > 1
-                if numel(channelConfig) == 1
-                    channelConfig = repmat(channelConfig, size(obj));
-                end
-                for ii = 1:numel(obj)
-                    setChannelConfig(obj(ii), channelConfig(ii));
-                end
-                return;
-            end
-            % Check what type of channels need to be configured.
-            if ~isfield(channelConfig, 'uni')
-                channelConfig.uni=0;
-            end
-            if ~isfield(channelConfig, 'bip')
-                channelConfig.bip=0;
-            end
-            if ~isfield(channelConfig, 'aux')
-                channelConfig.aux=0;
-            end
-            if ~isfield(channelConfig, 'acc')
-                channelConfig.acc=0;
-            end
-            if ~isfield(channelConfig, 'dig')
-                channelConfig.dig=0;
-            end
-            
-            count_UNI = 0;
-            count_BIP = 0;
-            count_AUX = 0;
-            count_Dig = 0;
-            
-            % Enable used channels
-            for i=1:length(obj.channels)
-                % Enable desired BIP channels
-                if (obj.channels(i).isBip())
-                    count_BIP = count_BIP + 1;
-                    if ismember(count_BIP, channelConfig.bip)
-                        obj.enableChannels(i);
-                    else
-                        obj.disableChannels(i);
-                    end
-                    % Enable desired UNI (ExG) channels
-                elseif (obj.channels(i).isExG())
-                    count_UNI = count_UNI + 1;
-                    if ismember(count_UNI, channelConfig.uni + 1) && ~strcmp(obj.channels(i).name,'CREF') %+1 for CREF channel
-                        obj.enableChannels(i);
-                    else
-                        obj.disableChannels(i);
-                    end
-                    % Enable desired AUX channels
-                elseif (obj.channels(i).isAux())
-                    count_AUX = count_AUX + 1;
-                    if ismember(count_AUX, channelConfig.aux)
-                        obj.enableChannels(i);
-                    else
-                        obj.disableChannels(i);
-                    end
-                    % Enable desired Digital/sensor channels
-                elseif (obj.channels(i).isDig())
-                    count_Dig=count_Dig+1;
-                    if channelConfig.dig&&(count_Dig>1)&&(count_Dig<=5) %Enable saturation channels
-                        obj.enableChannels(i);
-                    elseif channelConfig.acc&&(count_Dig>5)&&(count_Dig<=8)%Enable accelerometer channels
-                        obj.enableChannels(i);
-                    else
-                        obj.disableChannels(i);
-                    end
-                end
-            end         
-                        
-            % Update the device configuration
-            obj.updateDeviceConfig();
-        end
-        
+        end        
     end
 end

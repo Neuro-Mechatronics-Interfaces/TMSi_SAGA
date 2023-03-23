@@ -118,33 +118,35 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
     end
     
     methods
-        function obj = ImpedancePlot(fig, enabled_channels, channel_names)
+        function obj = ImpedancePlot(fig, channel_names)
             %IMPEDANCEPLOT - Constructor function for the ImpedancePlot Class
             %
-            %   obj = ImpedancePlot(fig, name, enabled_channels, channel_names, SAGA_type)
+            %   obj = TMSiSAGA.ImpedancePlot(fig, channel_names)
+            %   obj = TMSiSAGA.ImpedancePlot(tag, channel_names);
             %
             %   obj [out] - ImpedancePlot object.
-            %   fig [in] - Figure handle.
-            %   enabled_channels [in] - Channels that have been enabled for the measurement
-            %   channel_names [in] - Configured names for the impedance measurement
-            %   SAGA_type [in] - Type of SAGA that is used (32+ or 64+).
+            %   fig [in] - Figure handle. %   channel_names [in] - Configured names for the impedance measurement
+            %   tag [in] - Type of SAGA that is used (32+ or 64+).
             %
             % See also: Contents
-
             if ~isa(fig, 'matlab.ui.Figure')
-                if nargin > 2
-                    tag = string(channel_names);
-                else
-                    tag = "X";
+                tag = fig;
+                switch getenv('COMPUTERNAME')
+                    case 'NMLNHP-DELL-C01'
+                        def_pos = struct( ...
+                            'A', [150  1100  720  680], ...
+                            'B', [150   100  720  680]);
+                    otherwise
+                        def_pos = struct( ...
+                            'A',[100 100 400 400], ...
+                            'B',[500 100 400 400]);
                 end
-                channel_names = enabled_channels;
-                enabled_channels = fig;
                 fig = uifigure(...
                     'Name', sprintf('Impedance Plot: SAGA-%s', tag), ...
                     'Color', 'w', ...
                     'Icon', 'Impedance-Symbol.png', ...
                     'HandleVisibility', 'on', ...
-                    'Position', [100 100 400 400]);
+                    'Position', def_pos.(tag));
             else
                 tag = regexp(fig.Name, '((?<=SAGA-)\w+)', 'match');
                 if ~isempty(tag)
@@ -154,7 +156,7 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
                 end
             end
             obj.tag = string(tag);
-            obj.channels = enabled_channels + 1; % skip the CREF channel
+            obj.channels = 2:65;
             obj.channel_names = channel_names;        
             obj.num_channels = 64;
             

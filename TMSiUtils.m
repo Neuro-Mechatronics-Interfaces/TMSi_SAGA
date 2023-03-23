@@ -123,7 +123,7 @@ classdef TMSiUtils < TMSiSAGA.HiddenHandle
                     result = 1;
                 case 'bip'
                     result = 2;
-                case 'aux'
+                case {'aux', 'acc'}
                     result = 3;
                 case {'dig', 'digraw', 'digraw/sensor', 'sensor'}
                     result = 4;
