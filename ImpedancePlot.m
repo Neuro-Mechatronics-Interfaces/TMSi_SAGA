@@ -331,7 +331,7 @@ classdef ImpedancePlot < TMSiSAGA.HiddenHandle
 %             end
             % Do the same thing but without arbitrarily complicated code:
             UNI_locations = reshape(1:obj.num_channels, 8, 8);
-            UNI_locations = (UNI_locations(:))';
+            UNI_locations = (UNI_locations(:));
             
             % Ensure that the values in the grid are plotted in the right
             % locations
