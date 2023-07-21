@@ -1793,7 +1793,15 @@ classdef Device < TMSiSAGA.HiddenHandle
             %       for disbale/enable
             %   ChannelConfig.dig - DIGI configuration, 0 for DIGI Trigger 
             %       or 1 saturation sensor
-            
+            if numel(obj) > 1
+                if numel(ChannelConfig) == 1
+                    ChannelConfig = repmat(ChannelConfig,size(obj));
+                end
+                for ii = 1:numel(obj)
+                    setChannelConfig(obj(ii),ChannelConfig(ii));
+                end
+                return;
+            end
             
             % Check what type of channels need to be configured.
             if ~isfield(ChannelConfig, 'uni')
@@ -1820,7 +1828,7 @@ classdef Device < TMSiSAGA.HiddenHandle
             % Enable used channels
             for i=1:length(obj.channels)
                 % Enable desired BIP channels
-                if (obj.channels{i}.isBip())
+                if (obj.channels(i).isBip())
                     count_BIP = count_BIP + 1;
                     if ismember(count_BIP, ChannelConfig.bip)
                         obj.enableChannels(i);
@@ -1828,15 +1836,15 @@ classdef Device < TMSiSAGA.HiddenHandle
                         obj.disableChannels(i);
                     end
                     % Enable desired UNI channels
-                elseif (obj.channels{i}.isExG())
+                elseif (obj.channels(i).isExG())
                     count_UNI = count_UNI + 1;
-                    if ismember(count_UNI, ChannelConfig.uni + 1) && ~strcmp(obj.channels{i}.name,'CREF') %+1 for CREF channel
+                    if ismember(count_UNI, ChannelConfig.uni + 1) && ~strcmp(obj.channels(i).name,'CREF') %+1 for CREF channel
                         obj.enableChannels(i);
                     else
                         obj.disableChannels(i);
                     end
                     % Enable desired AUX channels
-                elseif (obj.channels{i}.isAux())
+                elseif (obj.channels(i).isAux())
                     count_AUX = count_AUX + 1;
                     if ismember(count_AUX, ChannelConfig.aux)
                         obj.enableChannels(i);
@@ -1844,7 +1852,7 @@ classdef Device < TMSiSAGA.HiddenHandle
                         obj.disableChannels(i);
                     end
                     % Enable desired Digital/sensor channels
-                elseif (obj.channels{i}.isDig())
+                elseif (obj.channels(i).isDig())
                     count_Dig=count_Dig+1;
                     if ChannelConfig.dig&&(count_Dig>1)&&(count_Dig<=5) %Enable saturation channels
                         obj.enableChannels(i);
