@@ -1770,6 +1770,94 @@ classdef Device < TMSiSAGA.HiddenHandle
             elseif obj.configuration.used_bandwidth < obj.configuration.interface_bandwidth && strcmp(obj.data_recorder.interface_type, 'wifi')
                 disp('[SAGA DR ] current configuration is within WiFi-bandwidth constraints.')
             end
-        end        
+        end
+
+        function setChannelConfig(obj, ChannelConfig)
+            %SETCHANNELCONFIG - Function that applies the specified channel configuration.
+            %
+            %   setChannelConfig(obj, ChannelConfig)
+            %
+            %   Function that applies a specified channel configuration.
+            %   When a channel is not present in the specified
+            %   configuration, the channel will be disabled.
+            %
+            %   obj [in] - Device object.
+            %   ChannelConfig [in] - Desired channel configuration. 
+            % 
+            %   ChannelConfig may contain the following name/value pairs:
+            %   ChannelConfig.uni - UNI channels, 1-32 for SAGA 32+ or 1-64 
+            %       for SAGA 64+
+            %   ChannelConfig.bip - BIP channels, 1-4
+            %   ChannelConfig.aux - AUX channels, 1-9
+            %   ChannelConfig.acc - internal accelerometer channels 0 or 1 
+            %       for disbale/enable
+            %   ChannelConfig.dig - DIGI configuration, 0 for DIGI Trigger 
+            %       or 1 saturation sensor
+            
+            
+            % Check what type of channels need to be configured.
+            if ~isfield(ChannelConfig, 'uni')
+                ChannelConfig.uni=0;
+            end
+            if ~isfield(ChannelConfig, 'bip')
+                ChannelConfig.bip=0;
+            end
+            if ~isfield(ChannelConfig, 'aux')
+                ChannelConfig.aux=0;
+            end
+            if ~isfield(ChannelConfig, 'acc')
+                ChannelConfig.acc=0;
+            end
+            if ~isfield(ChannelConfig, 'dig')
+                ChannelConfig.dig=0;
+            end
+            
+            count_UNI = 0;
+            count_BIP = 0;
+            count_AUX = 0;
+            count_Dig = 0;
+            
+            % Enable used channels
+            for i=1:length(obj.channels)
+                % Enable desired BIP channels
+                if (obj.channels{i}.isBip())
+                    count_BIP = count_BIP + 1;
+                    if ismember(count_BIP, ChannelConfig.bip)
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                    % Enable desired UNI channels
+                elseif (obj.channels{i}.isExG())
+                    count_UNI = count_UNI + 1;
+                    if ismember(count_UNI, ChannelConfig.uni + 1) && ~strcmp(obj.channels{i}.name,'CREF') %+1 for CREF channel
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                    % Enable desired AUX channels
+                elseif (obj.channels{i}.isAux())
+                    count_AUX = count_AUX + 1;
+                    if ismember(count_AUX, ChannelConfig.aux)
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                    % Enable desired Digital/sensor channels
+                elseif (obj.channels{i}.isDig())
+                    count_Dig=count_Dig+1;
+                    if ChannelConfig.dig&&(count_Dig>1)&&(count_Dig<=5) %Enable saturation channels
+                        obj.enableChannels(i);
+                    elseif ChannelConfig.acc&&(count_Dig>5)&&(count_Dig<=8)%Enable accelerometer channels
+                        obj.enableChannels(i);
+                    else
+                        obj.disableChannels(i);
+                    end
+                end
+            end         
+                        
+            % Update the device configuration
+            obj.updateDeviceConfig();
+        end
     end
 end
