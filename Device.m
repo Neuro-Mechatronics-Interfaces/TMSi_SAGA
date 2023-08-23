@@ -481,7 +481,7 @@ classdef Device < TMSiSAGA.HiddenHandle
             
             if parse_config
                 if ~exist('store_as_default', 'var')
-                    store_as_default = 0;
+                    store_as_default = 1;
                 end
 
                 if ~exist('web_interface_control', 'var')
