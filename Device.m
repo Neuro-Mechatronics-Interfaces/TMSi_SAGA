@@ -163,6 +163,11 @@ classdef Device < TMSiSAGA.HiddenHandle
         
         % Contains information on configuration settings
         configuration
+
+        % Number of seconds we want to sample from the device (at most)
+        % with any call to `sample`
+        desired_sample_buffer_length (1,1) double {mustBeInRange(desired_sample_buffer_length, 0.010, 10)} = 5
+%         desired_sample_buffer_length (1,1) double {mustBeInRange(desired_sample_buffer_length, 0.010, 10)} = 0.020;
         
         % File expressions
         impedance_file_expr
@@ -746,7 +751,7 @@ classdef Device < TMSiSAGA.HiddenHandle
             
             % Prepare sample buffer
             if obj.prepared_sample_buffer_length == 0
-                obj.prepared_sample_buffer_length = max(obj.configuration.base_sample_rate, obj.configuration.alternative_base_sample_rate) * obj.num_channels * 5;
+                obj.prepared_sample_buffer_length = round(max(obj.configuration.base_sample_rate, obj.configuration.alternative_base_sample_rate) * obj.desired_sample_buffer_length) * obj.num_channels;
                 obj.prepared_sample_buffer = TMSiSAGA.DeviceLib.createDataBuffer(obj.prepared_sample_buffer_length);
             end
             
