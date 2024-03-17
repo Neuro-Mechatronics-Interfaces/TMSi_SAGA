@@ -1458,35 +1458,40 @@ classdef Device < TMSiSAGA.HiddenHandle
             obj.out_of_sync = false;
         end
         
-        function setDeviceTag(obj, SN, TAG)
+        function ORDERED_TAG = setDeviceTag(obj, SN, TAG)
             %SETDEVICETAG  - Set the tag for this device.
             %
             % Syntax:
-            %   setDeviceTag(obj, SN, TAG);
+            %   ORDERED_TAG = setDeviceTag(obj, SN, TAG);
             %
             % Inputs:
             %   SN - Array of valid device serial numbers (double)
             %   TAG - Array of device tags (matched to SN)
             %
             % Output:
-            %   None -- Sets the TAG which is useful for tcp purposes to
+            %   ORDERED_TAG - Same as input TAG but if multiple elements in
+            %                   `obj` then the elements of ORDERED_TAG
+            %                   match how TAG was assigned to obj elements.
+            %
+            % Sets the TAG which is useful for tcp purposes to
             %           identify WHICH DEVICE IS THIS SAGA??
             %
             % See also: Contents
             
-            if numel(obj) > 1 
+            if numel(obj) > 1
+                ORDERED_TAG = TAG;
                 for ii = 1:numel(obj)
-                    setDeviceTag(obj(ii), SN, TAG);
+                    ORDERED_TAG(ii) = setDeviceTag(obj(ii), SN, TAG);
                 end
                 return;
             end
             idx = SN == obj.data_recorder.serial_number;
             if sum(idx) == 0
-                error('No possible matching serial number in SN array!');
+                error('[TMSi]:[DEVICE]::No possible matching serial number in SN array!');
             end
-            obj.tag = TAG(idx);
-            setDeviceTag(obj.channels, TAG(idx));
-
+            ORDERED_TAG = TAG(idx);
+            obj.tag = ORDERED_TAG;
+            setDeviceTag(obj.channels, ORDERED_TAG);
         end
         
         function updateDynamicInfo(obj)
