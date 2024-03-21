@@ -560,6 +560,9 @@ classdef Channel < TMSiSAGA.HiddenHandle
                 channels(i).ChanNr = obj(i).number;
                 channels(i).ChanDivider = obj(i).divider;                
                 channels(i).AltChanName = obj(i).alternative_name;
+                channels(i).name = obj(i).name;
+                channels(i).type = obj(i).type;
+                channels(i).unit_name = obj(i).unit_name;
             end
         end
     end

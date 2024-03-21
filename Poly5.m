@@ -120,7 +120,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             obj.channels = channels;
             obj.samples = zeros(numel(channels), 0);
             obj.num_samples = 0;
-            obj.date = clock;
+            obj.date = clock; %#ok<CLOCK>
             obj.num_samples_per_block = floor(2^13 / numel(channels));
             
             % Open a handle to the Poly5 file

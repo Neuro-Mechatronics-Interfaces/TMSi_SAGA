@@ -166,7 +166,8 @@ classdef Device < TMSiSAGA.HiddenHandle
 
         % Number of seconds we want to sample from the device (at most)
         % with any call to `sample`
-        desired_sample_buffer_length (1,1) double {mustBeInRange(desired_sample_buffer_length, 0.010, 10)} = 5
+        % desired_sample_buffer_length (1,1) double {mustBeInRange(desired_sample_buffer_length, 0.010, 10)} = 5
+        desired_sample_buffer_length (1,1) double {mustBeInRange(desired_sample_buffer_length, 0.010, 10)} = 10;
 %         desired_sample_buffer_length (1,1) double {mustBeInRange(desired_sample_buffer_length, 0.010, 10)} = 0.020;
         
         % File expressions
