@@ -54,6 +54,15 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
         filepath
         folder
         name
+
+        % Header information about the file
+        header
+        
+        % The offset position in the file where channel descriptions start
+        channels_offset
+
+        % The offset position in the file where data actually starts
+        data_offset
         
         % The sample rate at which the data is stored.
         sample_rate
@@ -62,12 +71,16 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
         %	channels{i}.name - Name of channel.
         %	channels{i}.unit_name - Unit of channel (e.g. uV).
         channels
+        num_channels % The number of actual channels
         
         % The number of samples that should have been stored to disk.
         num_samples
         
         % A boolean whether or not the file is opened and can be streamed to.
         is_open
+
+        % A boolean whether or not the file is writable
+        is_write_mode
         
         % The date of creation of object.
         date
@@ -77,6 +90,9 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
         
         % The digstat channel
         digstat_channel
+
+        % The current block from sequential reading
+        current_block = 1
     end
     
     properties(Access = private)
@@ -91,17 +107,24 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
     end
     
     methods
-        function obj = Poly5(filepath, sample_rate, channels)
+        function obj = Poly5(filepath, sample_rate, channels, permission)
             %POLY5 - Constructor for object that allows streaming of data to file.
             %
             %   obj = Poly5(filepath, name, sample_rate, channels)
             %
             %   obj [out] - Poly5 object.
             %   filepath [in] - Path to the Poly5 file.
-            %   name [in] - Name of the Poly5 file.
             %   sample_rate [in] - Sample rate used to sample the data.
             %   channels [in] - Channels that are present in the Poly5 file.
-            %
+            %   permission [in] - File access type of Poly5 file.
+
+            if nargin < 4
+                permission = 'a';
+            else
+                permission = char(permission);
+                permission = permission(1);
+            end
+
             filepath = string(filepath);
             if numel(filepath) > 1
                 obj = repmat(obj, size(filepath));
@@ -117,18 +140,14 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
                 mkdir(obj.folder);
             end
             obj.sample_rate = sample_rate;
-            obj.channels = channels;
-            obj.samples = zeros(numel(channels), 0);
             obj.num_samples = 0;
             obj.date = clock; %#ok<CLOCK>
-            obj.num_samples_per_block = floor(2^13 / numel(channels));
-            
-            % Open a handle to the Poly5 file
-            obj.handle = fopen(filepath, 'w', 'n', 'UTF-8');
-            if obj.handle == -1
-                throw(MException('Poly5:Poly5', sprintf('Could not open file (%s).', filepath)));
+            if isempty(channels) && ~strcmpi(permission, 'r')
+                throw(MException('Poly5:Poly5', 'Channels must be specified if opening file for writing!'));
             end
-            
+            obj.channels = channels;
+            obj.samples = zeros(numel(channels), 0);
+            obj.num_samples_per_block = floor(2^13 / numel(channels));
             % Keep track of the STATUS and COUNTER channels
             for i=1:numel(obj.channels)
                 if obj.channels(i).type == TMSiSAGA.TMSiUtils.toChannelTypeNumber('digstat')
@@ -139,11 +158,40 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
                     obj.counter_channel = i;
                 end
             end
-            
-            % Write the header and channel descriptions in the Poly5 file
-            TMSiSAGA.Poly5.writeHeader(obj.handle, obj, obj.num_samples_per_block);
-            TMSiSAGA.Poly5.writeChannelDescriptions(obj.handle, obj);
-            
+
+            % Open a handle to the Poly5 file
+            if (exist(filepath,"file")==0)||strcmpi(permission,'w')
+                obj.handle = fopen(filepath, permission, 'n', 'UTF-8');
+                if obj.handle == -1
+                    throw(MException('Poly5:Poly5', sprintf('Could not open file (%s).', filepath)));
+                end
+                
+                % Write the header and channel descriptions in the Poly5 file
+                obj.channels_offset = TMSiSAGA.Poly5.writeHeader(obj.handle, obj, obj.num_samples_per_block);
+                obj.data_offset = TMSiSAGA.Poly5.writeChannelDescriptions(obj.handle, obj);
+                obj.is_write_mode = true;
+            else
+                obj.is_write_mode = ~strcmpi(permission, 'r');
+                if ~obj.is_write_mode
+                    permission = [permission, '+'];
+                end
+                obj.handle = fopen(filepath, permission, 'n', 'UTF-8');
+                if obj.handle == -1
+                    throw(MException('Poly5:Poly5', sprintf('Could not open file (%s).', filepath)));
+                end
+                % ===========================================
+                %	HEADER
+                % ===========================================
+                [obj.header, obj.channels_offset] = TMSiSAGA.Poly5.readHeader(obj.handle);
+    
+                % ===========================================
+                %	SIGNAL DESCRIPTION
+                % ===========================================
+                [obj.channels, obj.data_offset] = TMSiSAGA.Poly5.readChannelDescriptions(obj.handle, obj.header.num_channels);
+                obj.num_channels = numel(obj.channels);
+                obj.samples = zeros(obj.num_channels, 0);
+                obj.num_samples_per_block = floor(2^13 / obj.num_channels);
+            end
             obj.is_open = true;
         end
         
@@ -167,7 +215,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
                 return;
             end
             
-            if ~obj.is_open
+            if (~obj.is_open) || (~obj.is_write_mode)
                 throw(MException('Poly5:append', 'Cannot append to this file'));
             end
             
@@ -220,13 +268,124 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
         end
         
         function delete(obj)
-            try
+            try %#ok<TRYNC> 
                 fclose(obj.handle);
-            catch
-                disp('Poly5 file already closed.');
             end
         end
         
+        function prepare_for_writing(obj)
+            if obj.is_open
+                fclose(obj.handle);
+            end
+            obj.is_open = false;
+            
+            % Open a handle to the Poly5 file
+            obj.handle = fopen(obj.filepath, 'a+', 'n', 'UTF-8');
+            if obj.handle == -1
+                throw(MException('Poly5:Poly5', sprintf('Could not open file (%s).', obj.filepath)));
+            end
+            obj.header = TMSiSAGA.Poly5.readHeader(obj.handle);
+            obj.channels = TMSiSAGA.Poly5.readChannelDescriptions(obj.handle, obj.header.num_channels);
+            obj.num_channels = numel(obj.channels);
+            obj.samples = zeros(obj.num_channels, 0);
+            obj.num_samples_per_block = floor(2^13 / obj.num_channels);
+            obj.data_offset = ftell(obj.handle);
+            obj.is_open = true;
+            obj.is_write_mode = true;
+            
+        end
+
+        function prepare_for_reading(obj)
+            if obj.is_open
+                fclose(obj.handle);
+            end
+            obj.is_open = false;
+            
+            % Open a handle to the Poly5 file
+            obj.handle = fopen(obj.filepath, 'r', 'n', 'UTF-8');
+            if obj.handle == -1
+                throw(MException('Poly5:Poly5', sprintf('Could not open file (%s).', obj.filepath)));
+            end
+            obj.is_open = true;
+            obj.is_write_mode = false;
+            obj.current_block = 1;
+
+            % ===========================================
+            %	HEADER
+            % ===========================================
+            obj.header = TMSiSAGA.Poly5.readHeader(obj.handle);
+
+            % ===========================================
+            %	SIGNAL DESCRIPTION
+            % ===========================================
+            obj.channels = TMSiSAGA.Poly5.readChannelDescriptions(obj.handle, obj.header.num_channels);
+            obj.num_channels = numel(obj.channels);
+            obj.samples = zeros(obj.num_channels, 0);
+            obj.num_samples_per_block = floor(2^13 / obj.num_channels);
+            obj.data_offset = ftell(obj.handle);
+        end
+
+        function samples = read_next_n_blocks(obj, n)
+            %READ_NEXT_N_BLOCKS  Read the next `n` data blocks and return `n` samples. Loops back to first samples if reaching end of file.
+            %
+            % Syntax:
+            %   samples = read_next_n_blocks(obj, n);
+            %
+            % Example:
+            %   % Open Poly5 file for reading:
+            %   poly5 = TMSiSAGA.Poly5('MyData.poly5', sample_rate, channels, 'r');
+            %   % Estimate how long to pause between each read iteration:
+            %   sample_delay = max(poly5.header.num_samples_per_block*2/poly5.header.sample_rate-0.010, 0.030);
+            %   % Create a GUI that lets you break the loop if needed:
+            %   fig = figure('Color','w','Name','Sample Reader Interface');
+            %   offset = 25; % microns
+            %   ax = axes(fig,'NextPlot','add','YLim',[-0.5*offset, 63.5*offset]);
+            %   title(ax, "MyData.poly5: UNI");
+            %   h = gobjects(64,1);
+            %   for iH = 1:64
+            %       h(iH) = line(ax,1:poly5.header.sample_rate,nan(1,poly5.header.sample_rate));
+            %   end
+            %   past_samples = zeros(64,1);
+            %   while isvalid(fig)
+            %       samples = read_next_n_blocks(poly5, 2);
+            %       iVec = rem(samples(end,:)-1,poly5.header.sample_rate)+1;
+            %       plot_data = [past_samples, samples(2:65,:)];
+            %       diff_data = plot_data(:,2:end) -plot_data(:,1:(end-1));
+            %       for iH = 1:64
+            %           h(iH).YData(iVec) = samples(iH+1,:)+offset*(iH-1);
+            %       end
+            %       drawnow();
+            %       past_samples = samples(2:65,end);
+            %       pause(sample_delay);
+            %   end
+            if ~obj.is_open || obj.is_write_mode
+                throw(MException('Poly5:read_next_n_blocks', ['File is not opened in write mode: ' obj.filepath]));
+            end
+            samples = zeros(obj.num_channels, n);            
+            k = 1;
+            N = obj.header.num_samples_per_block;
+            while (obj.current_block <= obj.header.num_data_blocks) && (k <= n)
+                samples(:, (1+(k-1)*N):(k*N)) = TMSiSAGA.Poly5.readDataBlock(obj.handle, obj.num_channels, N);
+                k = k + 1;
+                obj.current_block = obj.current_block + 1;
+            end
+            if k <= n
+                obj.current_block = 1;
+                fseek(obj.handle, obj.data_offset, "bof");
+                while k <= n
+                    samples(:, (1+(k-1)*N):(k*N)) = TMSiSAGA.Poly5.readDataBlock(obj.handle, obj.num_channels, N);
+                    k = k + 1;
+                    obj.current_block = obj.current_block + 1;
+                end
+            end
+        end
+
+        function reset(obj)
+            %RESET  Reset data to first sample point.
+            if obj.is_open && ~obj.is_write_mode
+                fseek(obj.handle, obj.data_offset, "bof");
+            end
+        end
     end
     
     methods(Static)
@@ -303,7 +462,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             %	SIGNAL DESCRIPTION
             % ===========================================
             TMSiSAGA.Poly5.writeChannelDescriptions(handle, data);
-            
+
             % ===========================================
             %	DATA BLOCK
             % ===========================================
@@ -318,14 +477,16 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             end
         end
     end
-    
-    methods(Access = private, Static)
-        function header = readHeader(handle)
+
+    methods(Static,Access=private)
+        function [header,channels_offset] = readHeader(handle)
             %READHEADER - Read header of a Poly5 file.
             %
-            %   header = readHeader(handle)
+            %   header = readHeader(handle);
+            %   [header,channels_offset] = readHeader(handle);
             %
             %   header [out] - Header of Poly5 file
+            %   channels_offset [out] - Byte position for start of 'channels' descriptions.
             %   handle [in] - Handle to Poly5 file
             %
             
@@ -358,52 +519,60 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
                 fclose(handle);
                 throw(MException('Poly5:read', 'Version number of file is invalid.'));
             end
+            channels_offset = ftell(handle);
         end
         
-        function channels = readChannelDescriptions(handle, num_channels)
+        function [channels, data_offset] = readChannelDescriptions(handle, num_channels)
             %READCHANNELDESCRIPTIONS - Read channel descriptions of Poly5 file.
             %
             %   channels = readChannelDescriptions(handle, num_channels)
+            %   [channels,data_offset] = readChannelDescriptions(handle, num_channels);
             %
             %   channels [out] - Cell array with channel descriptions of Poly5 file.
+            %   data_offset [out] - Byte position in file where data starts.
             %   handle [in] - Handle to Poly5 file.
             %   num_channels [in] - Number of channels in Poly5 file.
             %
             
-            channels = {};
-            channel_index = 1;
+            channels = struct('name', cell(num_channels,1), ...
+                              'alternative_name', cell(num_channels,1), ...
+                              'unit_name', cell(num_channels,1), ...
+                              'unit_low', cell(num_channels,1), ...
+                              'unit_high', cell(num_channels,1), ...
+                              'adc_low', cell(num_channels,1), ...
+                              'adc_high', cell(num_channels,1), ...
+                              'index', cell(num_channels,1), ...
+                              'cache_offset', cell(num_channels,1));
+            keep_channel = false(num_channels,1);
             for i=1:num_channels
-                channel = struct();
-                
                 fread(handle, 1, 'uint8');
-                channel.name = fread(handle, [1, 40], 'uint8');
-                channel.name = deblank(native2unicode(channel.name, 'UTF-8'));
+                channels(i).name = fread(handle, [1, 40], 'uint8');
+                channels(i).name = deblank(native2unicode(channels(i).name, 'UTF-8'));
                 fread(handle, 5, 'uint8');
-                channel.unit_name = fread(handle, [1 10], 'uint8');
-                channel.unit_name = deblank(native2unicode(channel.unit_name, 'UTF-8'));
-                channel.unit_low = fread(handle, 1, 'uint32');
-                channel.unit_high = fread(handle, 1, 'uint32');
-                channel.adc_low = fread(handle, 1, 'uint32');
-                channel.adc_high = fread(handle, 1, 'uint32');
-                channel.index = fread(handle, 1, 'uint16');
-                channel.cache_offset = fread(handle, 1, 'uint16');
+                channels(i).unit_name = fread(handle, [1 10], 'uint8');
+                channels(i).unit_name = deblank(native2unicode(channels(i).unit_name, 'UTF-8'));
+                channels(i).unit_low = fread(handle, 1, 'uint32');
+                channels(i).unit_high = fread(handle, 1, 'uint32');
+                channels(i).adc_low = fread(handle, 1, 'uint32');
+                channels(i).adc_high = fread(handle, 1, 'uint32');
+                channels(i).index = fread(handle, 1, 'uint16');
+                channels(i).cache_offset = fread(handle, 1, 'uint16');
+                if numel(channels(i).name) >= 6
+                    channels(i).alternative_name = channels(i).name(6:end);
+                else
+                    channels(i).alternative_name = 'Unknown';
+                end
                 fread(handle, 60, 'uint8');
                 
-                if ~strncmp('(Lo)', channel.name, 4) && ~strncmp('(Hi)', channel.name, 4)
+                if ~strncmp('(Lo)', channels(i).name, 4) && ~strncmp('(Hi)', channels(i).name, 4)
                     fclose(handle);
                     throw(MException('Poly5:read', 'Does not support non 16 bit format.'));
                 end
-                
-                if strncmp('(Lo)', channel.name, 4)
-                    if numel(channel.name) >= 6
-                        channels(channel_index).alternative_name = channel.name(6:end);
-                    else
-                        channels(channel_index).alternative_name = 'Unknown';
-                    end
-                    channels(channel_index).unit_name = channel.unit_name;
-                    channel_index = channel_index + 1;
-                end
+
+                keep_channel(i) = strncmp('(Lo)', channels(i).name, 4);
             end
+            channels = channels(keep_channel);
+            data_offset = ftell(handle);
         end
         
         function samples = readDataBlock(handle, num_channels, num_samples_per_block)
@@ -425,7 +594,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             samples = fread(handle, [num_channels num_samples_per_block], 'float32=>single');
         end
         
-        function writeHeader(handle, data, num_samples_per_block)
+        function channels_offset = writeHeader(handle, data, num_samples_per_block)
             %WRITEHEADER - Write a header for a Poly5 file.
             %
             %   writeHeader(handle, data, num_samples_per_block)
@@ -467,9 +636,12 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             fwrite(handle, numel(data.channels) * num_samples_per_block * 4, 'uint16');
             fwrite(handle, 0, 'uint16');
             fwrite(handle, zeros(1, 64), 'uint8');
+
+            channels_offset = ftell(handle);
+
         end
         
-        function writeChannelDescriptions(handle, data)
+        function data_offset = writeChannelDescriptions(handle, data)
             %WRITECHANNELDESCRIPTION - Write channel descriptions for a Poly5 file.
             %
             %   writeChannelDescriptions(handle, data)
@@ -508,9 +680,9 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
                     fwrite(handle, zeros(1, 62), 'uint8');
                 end
             end
+            data_offset = ftell(handle);
         end
-        
-        
+         
         function writeDataBlock(handle, num_samples_per_block, index, samples)
             %WRITEDATABLOCK - Write a data block for a Poly5 file. Is max 240 samples per block.
             %
