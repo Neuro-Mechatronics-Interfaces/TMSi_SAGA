@@ -389,7 +389,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
     end
     
     methods(Static)
-        function data = read(filepath)
+        function [data,header,channels] = read(filepath)
             %READ - A static function that allows opening and loading of a Poly5 file.
             %
             %   data = read(filepath)
@@ -404,7 +404,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             % Create a handle to the existing Poly5 file
             handle = fopen(filepath, 'r', 'n', 'US-ASCII');
             if handle == -1
-                throw(MException('Poly5:read', ['Could not open file, check if file is in use. ' filepath]));
+                throw(MException('Poly5:read', sprintf('Could not open file, check if file is in use: %s', filepath)));
             end
             
             % ===========================================
@@ -478,7 +478,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
         end
     end
 
-    methods(Static,Access=private)
+    methods(Static,Access=public)
         function [header,channels_offset] = readHeader(handle)
             %READHEADER - Read header of a Poly5 file.
             %
@@ -587,11 +587,15 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             %       read per call of this method
             %
             
-            fread(handle, 1, 'uint32');
-            fread(handle, 4, 'uint8');
-            fread(handle, 7, 'uint16');
-            fread(handle, 64, 'uint8');
-            samples = fread(handle, [num_channels num_samples_per_block], 'float32=>single');
+            index = fread(handle, 1, 'uint32');
+            if index > -1
+                fread(handle, 4, 'uint8');
+                fread(handle, 7, 'uint16');
+                fread(handle, 64, 'uint8');
+                samples = fread(handle, [num_channels num_samples_per_block], 'float32=>single');
+            else
+                samples = [];
+            end
         end
         
         function channels_offset = writeHeader(handle, data, num_samples_per_block)
