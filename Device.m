@@ -397,6 +397,9 @@ classdef Device < TMSiSAGA.HiddenHandle
             
             % Set the Dividers
             if isfield(config, 'Dividers')
+                if isstring(config.Dividers)
+                    config.Dividers = cellstr(config.Dividers);
+                end
                 for i = 1:size(config.Dividers,1)
                     if ~isa(config.Dividers{i,1}, 'char')
                         throw(MException('Device:setDividers', 'Divider argument type should be a string.'));
@@ -430,6 +433,9 @@ classdef Device < TMSiSAGA.HiddenHandle
             
             % Set the ReferenceMethod
             if isfield(config, 'ReferenceMethod')
+                if isstring(config.ReferenceMethod)
+                    config.ReferenceMethod = char(config.ReferenceMethod);
+                end
                 if ~isa(config.ReferenceMethod, 'char')
                     throw(MException('Device:setReferenceMethod', 'Reference method argument should be a string (common, average).'));
                 end
