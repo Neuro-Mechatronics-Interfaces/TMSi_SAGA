@@ -201,6 +201,9 @@ classdef Device < TMSiSAGA.HiddenHandle
         
         % Current status channel index
         current_status_channel_index
+
+        % Current triggers channel index
+        current_triggers_channel_index
     end
     
     methods (Access = private)
@@ -716,6 +719,27 @@ classdef Device < TMSiSAGA.HiddenHandle
             data_str = string(sprintf(obj.data_file_expr, ...
                 obj.tag, obj.recording_index));
         end
+
+        function start_sync(obj, sync_bit)
+            sync_mask = 2^sync_bit;
+            start(obj);
+            dev_buffer = TMSiSAGA.DeviceLib.createDataBuffer(90);
+            for iObj = 1:numel(obj)
+                [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
+                while num_sets < 1
+                    pause(0.001);
+                    [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
+                end
+                while bitand(raw_data(obj(iObj).current_triggers_channel_index),sync_mask)==sync_mask
+                    [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
+                    while num_sets < 1
+                        pause(0.001); 
+                        [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
+                    end
+                end
+            end
+            
+        end
         
         function start(obj, disable_avg_ref_calculation)
             %START - Start sampling on a TMSi device.
@@ -775,6 +799,10 @@ classdef Device < TMSiSAGA.HiddenHandle
                     
                     if obj.channels(channel_index).isStatus()
                         obj.current_status_channel_index = numel(aci);
+                    end
+
+                    if obj.channels(channel_index).isTrigger()
+                        obj.current_triggers_channel_index = numel(aci);
                     end
                 end
             end
@@ -858,7 +886,26 @@ classdef Device < TMSiSAGA.HiddenHandle
             
             obj.lib.deviceStoppedSampling(obj);
         end
-        
+
+        function [data, num_sets, data_type] = test_sample(obj, buffer, buffer_len)
+            [raw_data, num_sets, data_type] = TMSiSAGA.DeviceLib.getDeviceData(obj.handle, buffer, buffer_len);
+            % Data in double format
+            raw_data = reshape(raw_data(1:(num_sets*obj.num_active_channels)),obj.num_active_channels,num_sets);
+            data = zeros(obj.num_active_channels, num_sets);
+            if num_sets == 0
+                return;
+            end
+            
+            % Loop over channels and transform raw_data to data
+            for i=1:obj.num_active_channels
+                channel = obj.channels(obj.active_channel_indices(i));
+                
+                if channel.isActive(obj.impedance_mode)
+                    data(i, :) = channel.transform(raw_data(i, :));
+                end
+            end
+        end
+
         function [data, num_sets, data_type] = sample(obj)
             %SAMPLE - Retrieves samples from the device and does some basic processing.
             %
