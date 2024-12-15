@@ -181,18 +181,7 @@ classdef Device < TMSiSAGA.HiddenHandle
     properties (GetAccess = public, SetAccess = protected)
         % User tag for this device
         tag = ""
-    end
-    
-    properties (Access = private)
-        % Library
-        lib
-        
-        % Size of sample buffer
-        prepared_sample_buffer_length
-        
-        % Sample buffer
-        prepared_sample_buffer
-        
+
         % Active channel indices
         active_channel_indices
         
@@ -204,6 +193,17 @@ classdef Device < TMSiSAGA.HiddenHandle
 
         % Current triggers channel index
         current_triggers_channel_index
+    end
+    
+    properties (Access = private)
+        % Library
+        lib
+        
+        % Size of sample buffer
+        prepared_sample_buffer_length
+        
+        % Sample buffer
+        prepared_sample_buffer
     end
     
     methods (Access = private)
@@ -720,25 +720,118 @@ classdef Device < TMSiSAGA.HiddenHandle
                 obj.tag, obj.recording_index));
         end
 
-        function start_sync(obj, sync_bit)
-            sync_mask = 2^sync_bit;
-            start(obj);
-            dev_buffer = TMSiSAGA.DeviceLib.createDataBuffer(90);
-            for iObj = 1:numel(obj)
-                [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
-                while num_sets < 1
-                    pause(0.001);
-                    [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
-                end
-                while bitand(raw_data(obj(iObj).current_triggers_channel_index),sync_mask)==sync_mask
-                    [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
-                    while num_sets < 1
-                        pause(0.001); 
-                        [raw_data, num_sets] = test_sample(obj(iObj), dev_buffer, 90);
-                    end
-                end
+        function [start_sample, teensy] = start_sync(obj, sync_bit, com_port, baud_rate, sync_on_cmd, sync_off_cmd, teensy)
+            %START_SYNC Starts all device objects in array and attempts to synchronize them using the corresponding TRIGGERS sync bit mask.
+            %
+            % Syntax:
+            %   start_sample = start_sync(devices, sync_bit);
+            %   [start_sample, teensy] = start_sync(devices, sync_bit, com_port, baud_rate, sync_on_cmd, sync_off_cmd, teensy);
+            %
+            % Inputs:
+            %   devices - Array of TMSiSAGA.Device objects
+            %   sync_bit - Scalar integer 0 - 15 indicating which BIT to
+            %               check for the synchronization pulse. A single
+            %               logic HIGH to logic LOW pulse is required on
+            %               this 0-indexed bit for the normal acquisition
+            %               loop to begin.
+            %   com_port (optional): Default is "COM6" -- microcontroller
+            %                   COM port. Note that this method REQUIRES a
+            %                   connected microcontroller!
+            %   baud_rate (optional): Default is 115200 -- baudrate for
+            %                           communication with connected microcontroller.
+            %   sync_on_cmd (optional): Default is '1' -- Byte to
+            %                           communicate with microcontroller
+            %                           for start of pulse sequence.
+            %   sync_off_cmd (optional): Default is '0' -- Byte to
+            %                            communicate with microcontroller
+            %                            for end of pulse sequence.
+            %   teensy (optional): Default is [] -- Can pass the
+            %                       microcontroller directly to avoid
+            %                       creating new microcontroller instance
+            %                       if required.
+
+            arguments
+                obj
+                sync_bit (1,1) {mustBeMember(sync_bit, 0:15)}
+                com_port {mustBeTextScalar} = "COM6";
+                baud_rate (1,1) {mustBeInteger, mustBePositive} = 115200;
+                sync_on_cmd (1,1) char = '1';
+                sync_off_cmd (1,1) char = '0';
+                teensy = [];
             end
             
+            if isempty(teensy)
+                teensy = serialport(com_port, baud_rate);
+            end
+            sync_mask = 2^sync_bit;
+            n_dev = numel(obj);
+            dev_state = zeros(1,n_dev);
+            start_sample = zeros(1,n_dev);
+
+            teensy.write(sync_on_cmd,'char');
+            start(obj);
+            pause(0.500);
+            teensy.write(sync_off_cmd,'char');
+            vec = 1:n_dev;
+            while ~isempty(vec)
+                pause(0.000001);
+                for iObj = vec
+                    [buffer, buffer_size] = get_n_sample_buffer(obj(iObj), 1);
+                    data = test_sample(obj(iObj), buffer, buffer_size);
+                    if ~isempty(data)
+                        if dev_state(iObj) == 0
+                            dev_state(iObj) = dev_state(iObj) + all((bitand(data(obj(iObj).current_triggers_channel_index,:),sync_mask)==0) & (bitand(data(obj(iObj).current_status_channel_index,:), 2^11)==0)); % Block while logic LOW is asserted
+                        else
+                            dev_state(iObj) = dev_state(iObj) + all(bitand(data(obj(iObj).current_triggers_channel_index,:),sync_mask)==sync_mask); % Block while logic HIGH is asserted
+                        end
+                    end
+                    if dev_state(iObj) == 2
+                        start_sample(iObj) = data(obj(iObj).current_counter_channel_index);
+                    end
+                end
+                vec = find(dev_state < 2);
+            end
+            
+        end
+
+        function data = sample_sync(obj, n_samples)
+            %SAMPLE_SYNC Attempts to pull synchronized sample batch from all devices in array.
+            %
+            % Syntax:
+            %   data = sample_sync(devices, n_samples, n_total_channels);
+            %
+            % Inputs:
+            %   devices - Array of TMSiSAGA.Device objects
+            %   n_samples - Number of samples in requested batch
+
+            arguments
+                obj
+                n_samples (1,1) {mustBePositive, mustBeInteger}
+            end
+            n_dev = numel(obj);
+            n_total = zeros(1,n_dev);
+            data = cell(1,n_dev);
+            for iObj = 1:n_dev
+                data{iObj} = zeros(obj(iObj).num_active_channels, n_samples);
+            end
+            
+            vec = 1:n_dev;
+            while ~isempty(vec)
+                pause(0.00025);
+                for iObj = vec
+                    n_request = (n_samples-n_total(iObj));
+                    [buffer, buffer_size] = get_n_sample_buffer(obj(iObj), n_request); 
+                    [tmp, tmp_n] = test_sample(obj(iObj), buffer, buffer_size);
+                    data{iObj}(:,(n_total(iObj)+1):(n_total(iObj)+tmp_n)) = tmp;
+                    n_total(iObj) = n_total(iObj) + tmp_n;
+                end
+                vec = find(n_total<n_samples);
+            end
+            try
+                data = vertcat(data{:});
+            catch
+                keyboard;
+            end
         end
         
         function start(obj, disable_avg_ref_calculation)
@@ -836,6 +929,12 @@ classdef Device < TMSiSAGA.HiddenHandle
             obj.lib.deviceStartedSampling(obj);
         end
         
+        function [buffer, buffer_size] = get_n_sample_buffer(obj, n)
+            %GET_N_SAMPLE_BUFFER Returns buffer singleton for use with test_sample of desired samples size.
+            buffer_size = obj(1).num_active_channels * n;
+            buffer = TMSiSAGA.DeviceLib.createDataBuffer(buffer_size);
+        end
+
         function stop(obj)
             %STOP - Stop sampling on a TMSi device.
             %
@@ -888,14 +987,18 @@ classdef Device < TMSiSAGA.HiddenHandle
         end
 
         function [data, num_sets, data_type] = test_sample(obj, buffer, buffer_len)
+            %TEST_SAMPLE Low-level sample call that requires a specified buffer and buffer size.
+
             [raw_data, num_sets, data_type] = TMSiSAGA.DeviceLib.getDeviceData(obj.handle, buffer, buffer_len);
             % Data in double format
             raw_data = reshape(raw_data(1:(num_sets*obj.num_active_channels)),obj.num_active_channels,num_sets);
-            data = zeros(obj.num_active_channels, num_sets);
-            if num_sets == 0
+            
+            if num_sets < 1
+                data = [];
                 return;
             end
-            
+            data = zeros(obj.num_active_channels, num_sets);
+
             % Loop over channels and transform raw_data to data
             for i=1:obj.num_active_channels
                 channel = obj.channels(obj.active_channel_indices(i));

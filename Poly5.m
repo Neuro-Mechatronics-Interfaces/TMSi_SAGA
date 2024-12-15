@@ -136,7 +136,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             end
             obj.filepath = filepath;
             [obj.folder, obj.name, ~] = fileparts(obj.filepath);
-            if exist(obj.folder, 'dir') == 0
+            if (exist(obj.folder, 'dir') == 0) && ~isempty(obj.folder)
                 mkdir(obj.folder);
             end
             obj.sample_rate = sample_rate;

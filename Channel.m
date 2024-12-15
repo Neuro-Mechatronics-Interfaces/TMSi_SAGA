@@ -72,6 +72,9 @@ classdef Channel < TMSiSAGA.HiddenHandle
         
         % An optional sensor channel that is connected to this channel.
         sensor_channel
+
+        % SAGA-DR serial number associated with this channel.
+        sn (1,1) int64 = 0; % Serial number associated with SAGA
     end
 
     % Properties that must be set using class methods:
@@ -118,6 +121,7 @@ classdef Channel < TMSiSAGA.HiddenHandle
                 return;
             end
             obj.saga = tag;
+            obj.sn = device.data_recorder.serial_number;
             obj.number = int64(number);
             obj.type = int64(channel_info.ChannelType);
             obj.format = int64(channel_info.ChannelFormat);
@@ -553,15 +557,19 @@ classdef Channel < TMSiSAGA.HiddenHandle
             end
         end
 
-        function channels = toStruct(obj)
+        function channels = toStruct(obj, chan_nr_offset)
             %TOSTRUCT  Returns as a struct array 
+            if nargin < 2
+                chan_nr_offset = 0;
+            end
             channels = struct();
             for i=1:numel(obj)
-                channels(i).ChanNr = obj(i).number;
+                channels(i).ChanNr = obj(i).number + chan_nr_offset;
                 channels(i).ChanDivider = obj(i).divider;                
                 channels(i).AltChanName = obj(i).alternative_name;
                 channels(i).name = obj(i).name;
                 channels(i).type = obj(i).type;
+                channels(i).sn = obj(i).sn;
                 channels(i).unit_name = obj(i).unit_name;
             end
         end
