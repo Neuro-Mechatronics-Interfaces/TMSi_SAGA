@@ -570,6 +570,7 @@ classdef Channel < TMSiSAGA.HiddenHandle
                 channels(i).name = obj(i).name;
                 channels(i).type = obj(i).type;
                 channels(i).sn = obj(i).sn;
+                channels(i).tag = obj(i).saga;
                 channels(i).unit_name = obj(i).unit_name;
             end
         end

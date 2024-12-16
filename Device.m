@@ -827,11 +827,7 @@ classdef Device < TMSiSAGA.HiddenHandle
                 end
                 vec = find(n_total<n_samples);
             end
-            try
-                data = vertcat(data{:});
-            catch
-                keyboard;
-            end
+            data = vertcat(data{:});
         end
         
         function start(obj, disable_avg_ref_calculation)

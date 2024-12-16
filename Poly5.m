@@ -136,7 +136,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             end
             obj.filepath = filepath;
             [obj.folder, obj.name, ~] = fileparts(obj.filepath);
-            if (exist(obj.folder, 'dir') == 0) && ~isempty(obj.folder)
+            if (exist(obj.folder, 'dir') == 0) && strlength(obj.folder)>0
                 mkdir(obj.folder);
             end
             obj.sample_rate = sample_rate;
@@ -562,7 +562,15 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
                 else
                     channels(i).alternative_name = 'Unknown';
                 end
-                fread(handle, 60, 'uint8');
+                channels(i).tag = fread(handle, [1 6], 'uint8');
+                channels(i).tag = deblank(native2unicode(channels(i).tag, 'UTF-8'));
+                tmp_sn = fread(handle, [1 12], 'uint8');
+                tmp_sn = deblank(native2unicode(tmp_sn, 'UTF-8')); %#ok<N2UNI>
+                channels(i).sn = zeros(1,1,'int64');
+                for k = 1:numel(tmp_sn)
+                    channels(i).sn = channels(i).sn + int64(10)^(numel(tmp_sn)-k) * str2double(tmp_sn(k));
+                end
+                fread(handle, 42, 'uint8');
                 
                 if ~strncmp('(Lo)', channels(i).name, 4) && ~strncmp('(Hi)', channels(i).name, 4)
                     fclose(handle);
@@ -656,6 +664,8 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             
             for i=1:numel(data.channels)
                 unit_name = data.channels(i).unit_name;
+                saga_name = data.channels(i).tag;
+                saga_sn = data.channels(i).sn;
                 
                 for j=1:2
                     if j == 1
@@ -681,7 +691,17 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
                     fwrite(handle, 0, 'uint32');
                     fwrite(handle, 1000, 'uint32');
                     fwrite(handle, i, 'uint16');
-                    fwrite(handle, zeros(1, 62), 'uint8');
+                    fwrite(handle, 0, 'uint16'); % cache offset
+                    
+                    saga_name_utf8 = unicode2native(deblank(saga_name), 'UTF-8');
+                    fwrite(handle, saga_name_utf8, 'uint8');
+                    fwrite(handle, zeros(1, 6 - min(6, numel(saga_name_utf8))), 'uint8');
+
+                    saga_sn_utf8 = unicode2native(deblank(char(string(saga_sn))), 'UTF-8');
+                    fwrite(handle, saga_sn_utf8, 'uint8');
+                    fwrite(handle, zeros(1, 13 - min(13, numel(saga_sn_utf8))), 'uint8');
+
+                    fwrite(handle, zeros(1, 41), 'uint8');
                 end
             end
             data_offset = ftell(handle);
