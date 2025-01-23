@@ -720,58 +720,74 @@ classdef Device < TMSiSAGA.HiddenHandle
                 obj.tag, obj.recording_index));
         end
 
-        function [start_sample, teensy] = start_sync(obj, sync_bit, com_port, baud_rate, sync_on_cmd, sync_off_cmd, teensy)
+        function [start_sample, teensy] = start_sync(obj, teensy, options)
             %START_SYNC Starts all device objects in array and attempts to synchronize them using the corresponding TRIGGERS sync bit mask.
             %
+            % NOTE: Should be called DIRECTLY before the acquisition loop,
+            % presumably with a few "garbage" calls to `sample_sync` in
+            % order to ensure that **after** synchronization, we are AHEAD
+            % of the sample buffer on BOTH devices!
+            %
             % Syntax:
-            %   start_sample = start_sync(devices, sync_bit);
-            %   [start_sample, teensy] = start_sync(devices, sync_bit, com_port, baud_rate, sync_on_cmd, sync_off_cmd, teensy);
+            %   start_sample = start_sync(devices);
+            %   [start_sample, teensy] = start_sync(devices, teensy, 'Name', value, ...);
             %
             % Inputs:
             %   devices - Array of TMSiSAGA.Device objects
-            %   sync_bit - Scalar integer 0 - 15 indicating which BIT to
-            %               check for the synchronization pulse. A single
-            %               logic HIGH to logic LOW pulse is required on
-            %               this 0-indexed bit for the normal acquisition
-            %               loop to begin.
-            %   com_port (optional): Default is "COM6" -- microcontroller
-            %                   COM port. Note that this method REQUIRES a
-            %                   connected microcontroller!
-            %   baud_rate (optional): Default is 115200 -- baudrate for
-            %                           communication with connected microcontroller.
-            %   sync_on_cmd (optional): Default is '1' -- Byte to
-            %                           communicate with microcontroller
-            %                           for start of pulse sequence.
-            %   sync_off_cmd (optional): Default is '0' -- Byte to
-            %                            communicate with microcontroller
-            %                            for end of pulse sequence.
             %   teensy (optional): Default is [] -- Can pass the
             %                       microcontroller directly to avoid
             %                       creating new microcontroller instance
             %                       if required.
+            % Options:
+            %   'SyncBit': Default is 0 -- indicates which BIT to
+            %               check for the synchronization pulse. A single
+            %               logic HIGH to logic LOW pulse is required on
+            %               this 0-indexed bit for the normal acquisition
+            %               loop to begin.
+            %   'ComPort': Default is "COM6" -- microcontroller
+            %                   COM port. Note that this method REQUIRES a
+            %                   connected microcontroller!
+            %   'BaudRate': Default is 115200 -- baudrate for
+            %                           communication with connected microcontroller.
+            %   'SyncOnCmd': Default is '1' -- Byte to
+            %                           communicate with microcontroller
+            %                           for start of pulse sequence.
+            %   'SyncOffCmd': Default is '0' -- Byte to
+            %                            communicate with microcontroller
+            %                            for end of pulse sequence.
+            %   'MaxGarbagePollingDuration': Default is 30 seconds --
+            %                                Change this to set the number 
+            %                                of times to poll each device
+            %                                in an attempt to get each
+            %                                device "close" to an empty
+            %                                buffer (so that collected
+            %                                samples are near "real-time").
 
             arguments
                 obj
-                sync_bit (1,1) {mustBeMember(sync_bit, 0:15)}
-                com_port {mustBeTextScalar} = "COM6";
-                baud_rate (1,1) {mustBeInteger, mustBePositive} = 115200;
-                sync_on_cmd (1,1) char = '1';
-                sync_off_cmd (1,1) char = '0';
                 teensy = [];
+                options.SyncBit (1,1) {mustBeMember(options.SyncBit, 0:15)} = 1;
+                options.ComPort {mustBeTextScalar} = "COM6";
+                options.BaudRate (1,1) {mustBeInteger, mustBePositive} = 115200;
+                options.SyncOnCmd (1,1) char = '1';
+                options.SyncOffCmd (1,1) char = '0';
+                options.SamplePeriodFraction (1,1) double {mustBeInRange(options.SamplePeriodFraction,0,1)} = 0.5;
+                options.DesiredSampleBatchDuration (1,1) double = 0.010; % Batch "chunk" size we want to synchronize to this order
+                options.MaxGarbagePollingDuration (1,1) double = 30; % seconds
             end
             
             if isempty(teensy)
-                teensy = serialport(com_port, baud_rate);
+                teensy = serialport(options.ComPort, options.BaudRate);
             end
-            sync_mask = 2^sync_bit;
+            sync_mask = 2^options.SyncBit;
             n_dev = numel(obj);
             dev_state = zeros(1,n_dev);
             start_sample = zeros(1,n_dev);
 
-            teensy.write(sync_on_cmd,'char');
+            teensy.write(options.SyncOnCmd,'char');
             start(obj);
             pause(0.500);
-            teensy.write(sync_off_cmd,'char');
+            teensy.write(options.SyncOffCmd,'char');
             vec = 1:n_dev;
             while ~isempty(vec)
                 pause(0.000001);
@@ -791,7 +807,29 @@ classdef Device < TMSiSAGA.HiddenHandle
                 end
                 vec = find(dev_state < 2);
             end
-            
+
+            delayTic = tic();
+            max_garbage_delay = options.MaxGarbagePollingDuration;
+            fs = double(obj(1).sample_rate) / double(2^obj(1).dividers(1));
+            batch_samples = round(fs * options.DesiredSampleBatchDuration);
+            minAcceptableSampleDuration = options.SamplePeriodFraction *options.DesiredSampleBatchDuration;
+            syncFailed = true;
+            while (toc(delayTic) < max_garbage_delay) % Give a few seconds for the polling to catch up after synchronization step:
+                loopTic = tic();
+                sample_sync(obj, batch_samples);
+                if toc(loopTic) > minAcceptableSampleDuration % Then we had to wait for samples during the sync polling procedure- GOOD
+                    syncFailed = false;
+                    fprintf(1,'[TMSiSAGA.DEVICE]::Synchronization successful.\n');
+                    break;
+                end
+            end
+            if syncFailed
+                warning('[TMSiSAGA.DEVICE]::Could not poll fast enough to wait %.1fms/batch or longer!\n', round(minAcceptableSampleDuration*1e3,1));
+            end
+            % Provided we exit here without the warning, we should be 
+            % **reasonably** synchronized as long as we immediately enter 
+            % the sample batch acquisition loop after this initialization 
+            % and continue to poll regularly without getting "behind" 
         end
 
         function data = sample_sync(obj, n_samples)
