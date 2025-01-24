@@ -384,6 +384,7 @@ classdef Poly5 < TMSiSAGA.HiddenHandle
             %RESET  Reset data to first sample point.
             if obj.is_open && ~obj.is_write_mode
                 fseek(obj.handle, obj.data_offset, "bof");
+                obj.current_block = 1;
             end
         end
     end
