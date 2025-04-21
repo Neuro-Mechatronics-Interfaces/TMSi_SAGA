@@ -832,15 +832,19 @@ classdef Device < TMSiSAGA.HiddenHandle
             % and continue to poll regularly without getting "behind" 
         end
 
-        function data = sample_sync(obj, n_samples)
+        function [data, n_samples_remaining] = sample_sync(obj, n_samples)
             %SAMPLE_SYNC Attempts to pull synchronized sample batch from all devices in array.
             %
             % Syntax:
-            %   data = sample_sync(devices, n_samples, n_total_channels);
+            %   [data,n_samples_remaining] = sample_sync(devices, n_samples, n_total_channels);
             %
             % Inputs:
             %   devices - Array of TMSiSAGA.Device objects
             %   n_samples - Number of samples in requested batch
+            %
+            % Output
+            %   data - The synchronized data for both devices.
+            %   n_samples_remaining - Number of samples remaining in buffer on each device.   
 
             arguments
                 obj
@@ -866,6 +870,13 @@ classdef Device < TMSiSAGA.HiddenHandle
                 vec = find(n_total<n_samples);
             end
             data = vertcat(data{:});
+            if nargout < 2
+                return;
+            end
+            n_samples_remaining = zeros(1,n_dev);
+            for iObj = 1:n_dev
+               n_samples_remaining(iObj) = TMSiSAGA.DeviceLib.getDeviceDataBuffered(obj(iObj).handle) / 400;
+            end
         end
         
         function start(obj, disable_avg_ref_calculation)
